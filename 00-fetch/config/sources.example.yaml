@@ -1,0 +1,87 @@
+# 来源配置模板
+#
+# 声明式定义一个 topic 的抓取来源。v1.1 脚本将读这个文件（当前 v1.0 脚本仍硬编码）。
+# 复制为 sources.<topic>.yaml 后编辑。
+
+topic: RAG  # 主题名，决定输出目录 <workspace>/<Topic>/raw/
+
+workspace_root: "D:\\raw app\\RawMaterialCollector"  # ① Collect 的工作区根
+
+# 官方文档（HTML -> .md）
+docs:
+  - url: "https://python.langchain.com/docs/tutorials/rag/"
+    stem: langchain-rag-tutorial
+  - url: "https://docs.llamaindex.ai/en/stable/getting_started/concepts/"
+    stem: llamaindex-concepts
+  - url: "https://www.pinecone.io/learn/retrieval-augmented-generation/"
+    stem: pinecone-rag-guide
+  - url: "https://www.anthropic.com/news/contextual-retrieval"
+    stem: anthropic-contextual-retrieval
+  # SPA 站点会触发 puppeteer fallback（v1.1）
+  - url: "https://txt.cohere.com/rag/"
+    stem: cohere-rag
+    spa: true  # 标记 SPA，直接用 puppeteer
+
+# arxiv 论文（API 搜索 + PDF 下载）
+arxiv:
+  search_query: 'all:"retrieval augmented generation"'
+  max_results: 40
+  sort_by: relevance
+  download_top_n: 20  # 从搜索结果下前 N 个 PDF
+  # 校验：下载后从 PDF 第 1 页提取标题，和 API 返回的 <title> 比对
+  validate_title: true
+
+# Reddit 帖子（puppeteer+Edge）
+reddit:
+  subreddits:
+    - name: Rag
+      sort: top  # top / hot / new
+      t: all     # all / year / month / week
+      limit: 14  # 抓几个详情
+    - name: LocalLLaMA
+      sort: top
+      t: all
+      limit: 10
+  # 多版搜索：r/LocalLLaMA search RAG
+  searches:
+    - subreddit: MachineLearning
+      query: RAG
+      sort: top
+      t: all
+      limit: 10
+
+# 大佬博客（两步：首页解析文章链接 -> 抓具体文章）
+blogs:
+  - homepage: "https://lilianweng.github.io/"
+    type: static  # static / spa
+    # 抓首页 -> 解析 /posts/ 链接 -> 抓具体文章
+    article_pattern: "/posts/"
+    filter_keywords: ["RAG", "retrieval", "augmented"]
+  - homepage: "https://magazine.sebastianraschka.com/"
+    type: spa  # Substack，要 puppeteer
+    article_pattern: "/p/"
+    filter_keywords: ["RAG", "retrieval"]
+  - homepage: "https://eugeneyan.com/"
+    type: static
+    article_pattern: "/writing/"
+    filter_keywords: ["RAG", "retrieval"]
+
+# GitHub README（raw 直抓）
+github:
+  - repo: "hemansanthos/rag-tutorial"  # 示例
+    branch: main
+  - repo: "NirDiamant/GenAI_Agents"  # 示例（如有 RAG 章节）
+    branch: main
+
+# 抓取设置
+settings:
+  proxy: "http://127.0.0.1:7892"
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  delay_seconds: 2.0  # 每请求间隔
+  timeout_seconds: 45
+  # 校验阈值
+  html_min_chars: 500  # 低于此判定 SPA，触发 puppeteer fallback
+  pdf_min_bytes: 2000  # 低于此判定下载失败
+  # 文件名
+  filename_from: content_title  # content_title / url_slug / provided_stem
+  filename_max_length: 70

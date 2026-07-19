@@ -1,11 +1,12 @@
 # Video Factory
 
-An 8-stage AI video-production pipeline. Each stage is a self-contained tool; together they turn raw research material into a finished MP4.
+An AI video-production pipeline. Each stage is a self-contained tool; together they turn raw research material into a finished MP4.
 
 | # | Stage | Purpose | Status |
 |---|-------|---------|--------|
-| ① | **Collect** | Gather all raw materials | ✅ done · 2026-07-20 |
-| ② | **Research** | Distill credible knowledge | 🔲 planned |
+| ⓪ | **Fetch** | Actively harvest materials from the web (docs, papers, Reddit, blogs) | ✅ v1.0 · 2026-07-20 |
+| ① | **Collect** | Gather all raw materials (container, also receives manual drops) | ✅ done · 2026-07-20 |
+| ② | **Research** | Distill credible knowledge | ✅ v1.0 done · 2026-07-20 (RAG topic, 48 sources -> research package) |
 | ③ | **Script** | Turn knowledge into a narration script | 🔲 planned |
 | ④ | **Visual Language** | Translate each abstract line into a visual expression (metaphor, diagram, flow, icon) | 🔲 planned |
 | ⑤ | **Asset Planning** | List every asset this episode needs (SVG, icons, logos, illustrations, AI images) | 🔲 planned |
@@ -13,43 +14,48 @@ An 8-stage AI video-production pipeline. Each stage is a self-contained tool; to
 | ⑦ | **HyperFrames** | Auto-generate the HTML / CSS / GSAP animation engineering | 🔲 planned |
 | ⑧ | **Render** | Export the MP4 | 🔲 planned |
 
-> **Layout note:** the repo root currently holds stage ①. When later stages arrive the tree will be reorganized into per-stage directories (`01-collect/`, `02-research/`, ...) via `git mv`, so history is preserved.
+> **Layout note:** stage ⓪ (Fetch) lives in `00-fetch/`. Stage ① (Collect) code lives at the repo root (`src/`, `src-tauri/`). When later stages arrive the tree will be reorganized into per-stage directories (`01-collect/`, `02-research/`, ...) via `git mv`, so history is preserved.
 
 ---
 
-## Stage ① — Collect (Raw Material Collector)
+## Stage ⓪ - Fetch (资料抓取)
 
-A Windows-first desktop app that is the **first step** of the pipeline. Its only job: collect raw materials as fast as possible.
+The upstream feeder. Given a topic, it actively harvests materials from the web (official docs, arxiv papers, Reddit, blogs, GitHub) and writes them into stage ① Collect's `raw/` directory. Fetch is the active harvester; Collect is the passive container.
 
-It is a **container** — not a note app, not a knowledge base, not an AI app. No AI, no organization, no summaries, no classification, no dedup. You throw files in; later stages process them.
+- **Spec & overview:** [`00-fetch/README.md`](./00-fetch/README.md)
+- **Lessons learned (problems + solutions from the RAG first run):** [`00-fetch/lessons-learned.md`](./00-fetch/lessons-learned.md)
+- **Sources playbook (per-source-type method):** [`00-fetch/sources-playbook.md`](./00-fetch/sources-playbook.md)
+- **Scripts:** [`00-fetch/scripts/`](./00-fetch/scripts/) (Python `requests` for docs/arxiv, `puppeteer-core` + Edge for Reddit/SPA)
+
+**First run (2026-07-20, RAG topic):** 48 materials harvested in 3 rounds - 13 official docs (.md) + 21 arxiv papers (.pdf) + 14 Reddit r/Rag posts (.md), 49 MB. Broke Reddit's 403 anti-bot wall with puppeteer + real Edge. Known issues (wrong arxiv ID for CRAG, mislabeled filename, PDF truncation, 7 Reddit posts unread) recorded in `00-fetch/lessons-learned.md` and fed into v1.1 iteration.
+
+---
+
+## Stage ① - Collect (Raw Material Collector)
+
+A Windows-first desktop app that is the **container** for all raw materials - both those harvested by stage ⓪ Fetch and those the user manually drops/pastes.
+
+It is a **container** - not a note app, not a knowledge base, not an AI app. No AI, no organization, no summaries, no classification, no dedup. You throw files in; later stages process them.
 
 Built with **Tauri 2 + React + TypeScript + Tailwind CSS**.
 
 ### Features
 
-**Topics**
-- Each **Topic** = one video project or series. Unlimited topics.
-- Sidebar lists all topics; a large **`+`** button creates a new topic (asks only for a name).
+**Topics** - each Topic = one video project or series. Unlimited topics.
 
-**Per-topic workspace**
-- Each topic has its own workspace with a large **"Drop anything here."** drop zone.
-- A read-only file list shows what's already been collected.
-- **"Open folder"** reveals the topic's raw folder in Windows Explorer.
+**Per-topic workspace** - large "Drop anything here." drop zone; read-only file list; "Open folder" reveals the topic's raw folder in Explorer.
 
-**Drag & drop** — accepts Markdown, PDF, Word (`.docx`), TXT, HTML, images, and **any unknown file** (copied as-is, never modified, never renamed). Duplicates get a `-1`, `-2`, ... suffix; **files are never overwritten.** Folder drops are copied recursively, preserving structure.
+**Drag & drop** - Markdown, PDF, Word (.docx), TXT, HTML, images, and any unknown file (copied as-is, never modified, never renamed). Duplicates get a `-1`, `-2`, ... suffix; files are never overwritten. Folder drops are copied recursively, preserving structure.
 
-**Paste (Ctrl+V)**
-- Clipboard **text** → `Clipboard-YYYY-MM-DD-HHMMSS.md`
-- Clipboard **image** → a `.png` file
-- Ignored while focus is in an input field.
+**Paste (Ctrl+V)** - clipboard text -> `Clipboard-YYYY-MM-DD-HHMMSS.md`; clipboard image -> `.png`. Ignored while focus is in an input field.
 
-**Quick Drop Mode** — a top-right toggle that locks a topic as the default destination. While active, everything dropped or pasted goes straight in with no confirmation dialog — ideal for long research sessions.
+**Quick Drop Mode** - top-right toggle that locks a topic as the default destination. While active, everything dropped or pasted goes straight in with no confirmation dialog.
 
-**Delete** — hover a collected row to reveal its delete button; hover a topic in the sidebar to reveal its trash button (with a confirm dialog).
+**Delete** - hover a collected row to reveal its delete button; hover a topic in the sidebar to reveal its trash button (with a confirm dialog).
 
-**Settings** — change the workspace root folder; theme light / dark / system.
+**Settings** - change the workspace root folder; theme light / dark / system.
 
-**100% local** — no cloud, no database, no login, no sync. Files live on your disk; the app just reads and writes them.
+**100% local** - no cloud, no database, no login, no sync. Files live on your disk; the app just reads and writes them.
 
 ### Storage layout
 
@@ -58,16 +64,17 @@ Default workspace root is configurable in Settings. Each topic is a directory; e
 ```
 <workspace root>\
   <Topic Name>\
-    raw\
+    raw\           ← stage ⓪ Fetch writes here; stage ① Collect also drops here
       <original files, untouched>
+    research\      ← stage ② Research writes here (research package)
 ```
 
 ### Prerequisites
 
 - **Node.js 18+** (developed on v24) and **npm**.
 - **Rust toolchain** (`stable-msvc`) via [rustup](https://rustup.rs).
-- **Microsoft Visual C++ Build Tools** — MSVC C++ workload, required by Rust/Tauri linking on Windows.
-- **Microsoft Edge WebView2 Runtime** — preinstalled on Windows 11.
+- **Microsoft Visual C++ Build Tools** - MSVC C++ workload.
+- **Microsoft Edge WebView2 Runtime** - preinstalled on Windows 11.
 
 ### Install & run
 
@@ -85,7 +92,13 @@ npm run tauri:build  # produces an installer under src-tauri/target/release/bund
 ### Project structure
 
 ```
-├── package.json
+├── 00-fetch/              ← stage ⓪ (Fetch workflow: spec, lessons, scripts)
+│   ├── README.md
+│   ├── lessons-learned.md
+│   ├── sources-playbook.md
+│   ├── scripts/
+│   └── config/
+├── package.json           ← stage ① (Collect app)
 ├── vite.config.ts
 ├── tailwind.config.ts
 ├── tsconfig.json
@@ -107,16 +120,18 @@ npm run tauri:build  # produces an installer under src-tauri/target/release/bund
 │   │   └── lib.rs
 │   └── icons\
 └── docs\
+    ├── PLANNING.md        ← full project planning (2026-07-20 snapshot)
+    ├── research-agent-spec-v1.0.md   ← stage ② spec
     └── superpowers\
         └── specs\
 ```
 
 ### Architecture notes
 
-- **Filesystem is the single source of truth.** The topic list is derived by scanning the workspace directory — there is no metadata database.
+- **Filesystem is the single source of truth.** The topic list is derived by scanning the workspace directory - there is no metadata database.
 - **All file operations are Rust commands** (copy with collision handling, recursive folder copy, save text/image, list, delete). The React frontend calls them via Tauri's `invoke`.
 - **State** is managed with [Zustand](https://github.com/pmndrs/zustand); user settings are persisted via `tauri-plugin-store` in AppData.
-- **Reserved extension point:** `src/lib/pipeline.ts` (planned, not implemented) — future stages will read `<workspace>/<Topic>/raw/*` from here.
+- **Reserved extension point:** `src/lib/pipeline.ts` (planned, not implemented) - future stages will read `<workspace>/<Topic>/raw/*` from here.
 
 ### Raw philosophy (invariants)
 
@@ -133,6 +148,6 @@ The app is a **container only**.
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+V` | Paste clipboard into the current / Quick-Drop topic (text → `.md`, image → `.png`) |
+| `Ctrl+V` | Paste clipboard into the current / Quick-Drop topic (text -> `.md`, image -> `.png`) |
 | `Enter`  | Confirm dialogs |
 | `Esc`    | Close dialogs |

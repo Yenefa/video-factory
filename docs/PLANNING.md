@@ -1,6 +1,8 @@
 > **快照日期：** 2026-07-20
 > **实时进度：** 见根 [README.md](../README.md) 进度表
 > **进度校准：** Phase 1（Raw Material Collector）实际已完成 ✅ 2026-07-20。本文档成文时记为"正在开发"，现已推进；以 README 进度表为实时真值，本文档其余规划（Phase 2-6）不变。
+
+> **管线校准（2026-07-20）：** 新增第 ⓪ 层 Fetch（资料抓取），在 ① Collect 之前。详见 `00-fetch/README.md`。本文档成文时管线为 8 层（Collect->...->Render），现已扩展为 9 层（Fetch->Collect->...->Render）。
 > **文档性质：** 活规划文档，随项目演进更新；历史快照见 `git log`。
 
 ---
