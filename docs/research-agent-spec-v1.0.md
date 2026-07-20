@@ -6,6 +6,9 @@
 ---
 
 # Research Agent Specification v1.0
+> **版本原则：** 见 [versioning.md](./versioning.md)（Oracle 风格：Major / Release Update / Patch 三层）。本 Spec 当前 **v1.0**。
+> **v2.0 计划**（下一 Major，加新规则）：扫描版 PDF OCR fallback / 上下文不足分批读取协议 / 来源 ID 校验 / 文件名从内容提取 / SPA 自动 fallback。
+
 
 ## Mission
 
