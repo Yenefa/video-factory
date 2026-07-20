@@ -97,14 +97,18 @@ OUT="D:/raw app/RawMaterialCollector/RAG/extracted"
 
 ---
 
-## v1.0-20260720 状态
+## v1.5-20260720 状态（passthrough + cache + clean_html 集成）
 
-- ✅ `textize.py` - docling 统一文本化（PDF/DOCX/HTML/图片/PPTX/EPub），可配 OCR 引擎（rapidocr 中文强）
-- ✅ `extract_pdf.py` - pypdf 轻量备选（born-digital PDF）
+- ✅ `textize.py` v1.5 - docling 统一文本化 + **.md/.txt passthrough**（自动复制+Textize头）+ **缓存**（mtime 比对，重跑秒完）+ **clean_html 集成**（docling 处理 HTML，不单独写脚本）
+- ✅ `extract_pdf.py` - pypdf 轻量备选（born-digital PDF，不装 docling 时用）
 - 🟡 `ocr_scanned.py` - 已废弃（docling 内置 OCR 替代），保留参考
-- 🔲 `.md/.txt` 直通逻辑 - 待加（textize.py 跳过或轻清理复制）
+- ✅ `.md/.txt` passthrough - v1.5 完成
+- ✅ 缓存 - v1.5 完成（`.cache.json`，`--force` 强制重跑）
+- ✅ clean_html - docling 处理（不单独写脚本）
 
-v1.5 计划：textize.py 加 .md/.txt passthrough + 缓存（文件未变跳过）+ 真实 OCR 测试。
+**实测：** RAG topic 48 文件，v1.0 首次跑全 docling（~10min）；v1.5 删 2 个 .md out -> 重新 passthrough 生成（46 skipped cached）；再跑 48 skipped 秒完（cache 生效）。passthrough .md 带 Textize 头。
+
+v2.0 计划：无（v1.5 已覆盖 Textize 全部需求）。后续按需。
 
 ---
 
