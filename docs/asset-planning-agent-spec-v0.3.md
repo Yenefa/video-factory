@@ -71,7 +71,11 @@ Every planned or completed asset manifest record must include:
   "source": {
     "kind": "internal | generated | external | unknown",
     "reference": "stable non-secret identifier or unknown",
-    "license": "owned | approved internal use | unknown"
+    "license": "owned | approved internal use | unknown",
+    "creator_or_publisher": "string or null",
+    "attribution": "string or null",
+    "ancestor_asset_id": "string or null",
+    "unknown_reason": "string or null"
   },
   "cost_status": "unknown",
   "provenance": {
@@ -84,7 +88,12 @@ Every planned or completed asset manifest record must include:
 
 `cost_status` must remain `"unknown"` unless verified by a separately approved accounting record; never label a route or provider as free. `provider_url` is always `null` in persisted artifacts. `source.reference` must be a stable non-secret identifier, never a provider or download URL.
 
-For `capture_external`, preserve the original creator or publisher when known, the source reference, applicable license, and any required attribution in the manifest. For `library` and `modify`, retain the ancestor asset identifier and its license. For `code`, record the owning module or component identifier. For `ai_generate`, record only a non-secret provider label if approved; otherwise use `unknown`.
+Route-specific source requirements:
+
+- `capture_external` must persist `source.creator_or_publisher` and `source.attribution`. Either value may be `unknown` only when `source.unknown_reason` explains why it could not be established. Preserve the source reference and applicable license in all cases.
+- `library` and `modify` must persist `source.ancestor_asset_id` for the selected or adapted asset, and retain that asset's license. `ancestor_asset_id` is `null` only for routes that do not inherit an asset.
+- `code` must use its owning module or component identifier as `source.reference`.
+- `ai_generate` may record only a non-secret provider label if approved; otherwise use `unknown`.
 
 ## Job contract
 
@@ -92,7 +101,7 @@ Each job must include these fields:
 
 - `job_id`, `scene_id`, `stage`, and `stage_boundary`
 - `route`, `asset_type`, `purpose`, `reusable`, and `output`
-- `source` with `kind`, `reference`, and `license`
+- `source` with `kind`, `reference`, `license`, `creator_or_publisher`, `attribution`, `ancestor_asset_id`, and `unknown_reason`
 - `cost_status: "unknown"`
 - `handoff` describing the non-timed dependency supplied to Storyboard
 
@@ -105,7 +114,7 @@ Before handoff, verify:
 - every route follows the routing priority;
 - generated-image jobs total no more than three;
 - every generated image is 720 × 1280 with batch size 1 and one attempt;
-- every record includes stage-boundary and source/license metadata;
+- every record includes stage-boundary and source/license metadata, including its route-specific provenance fields;
 - completed generated files were downloaded immediately and referenced only by a local asset identifier or repository-relative path;
 - no secret, signed URL, provider URL, or unsupported cost claim is present;
 - reusable code assets have stable ownership and an implementation target;
