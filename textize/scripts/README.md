@@ -2,99 +2,95 @@
 
 > 把 `raw/` 里的文件文本化成 `extracted/*.md`，喂给 ② Research。
 > **流向：** RAW -> Textize 文本化 -> Research（Research 只读 extracted/，不碰 raw 解析）。
-> **全本地，无 API**（OCR 用 PaddleOCR / Tesseract，不联网不付费）。
+> **核心引擎：docling**（IBM，MIT，统一文档解析），全本地，无 API。
+
+---
+
+## 为什么用 docling（不再自己写骨架）
+
+Textize 要处理 PDF / DOCX / HTML / 图片等格式，自己写 4 个骨架（extract_pdf / ocr_scanned / clean_html / extract_docx）是重复造轮子。docling 一个库统一处理：
+
+- PDF（born-digital + 扫描 OCR）
+- DOCX / PPTX
+- HTML
+- 图片（.png/.jpg，OCR + 版面）
+- EPub 等
+
+一个 `converter.convert(file)` 调用，输出 Markdown。企业级（IBM 出品，有 arXiv 论文），MIT，本地免费。
+
+**中文 OCR：** docling 的 OCR 引擎可配置，`--ocr rapidocr` 用 RapidOCR（= PaddleOCR 的 ONNX 轻量版，中文质量同 PaddleOCR，不用装 PaddlePaddle 重框架）。
 
 ---
 
 ## 环境依赖
 
-- **Python：** `C:\Users\fuker\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe`（3.11 + pypdf 6.14）
-- **pypdf**（born-digital PDF 提取）：已装
-
-### OCR 依赖（按 backend 选）
-
-**PaddleOCR（默认，推荐，中文强）：**
-```bash
-pip install paddlepaddle paddleocr pdf2image Pillow
-```
-- 首次运行自动下载 PP-OCR 模型（~100MB，缓存本地，之后离线可用）
-- `pdf2image` 依赖 **poppler**：Windows 装 [poppler-windows](https://github.com/oschwartz10612/poppler-windows/releases)，加 PATH
-
-**Tesseract（轻量备选，中文一般）：**
-```bash
-pip install pytesseract pdf2image Pillow
-```
-- 装 [UB Mannheim Tesseract](https://github.com/UB-Mannheim/tesseract/wiki) 引擎
-- 同样需要 poppler（pdf2image）
+- **Python：** `C:\Users\fuker\AppData\Local\hermes\hermes-agent\venv\Scripts\python.exe`（3.11）
+- **docling：** `pip install docling`（走代理：`HTTPS_PROXY=http://127.0.0.1:7892`）
+  - 首次运行下载 DL 模型（版面分析 + 表格识别，~几百 MB，缓存本地）
+  - 较重（依赖 torch 等），但效果远好于 pypdf 裸提取
+- **RapidOCR（可选，中文扫描件）：** docling 内部调用，`pip install rapidocr_onnxruntime`（docling 配 `--ocr rapidocr` 时用）
 
 ---
 
-## extract_pdf.py - born-digital PDF 文本提取
+## textize.py - 统一文本化（docling）
 
-**用途：** 提取 raw/ 里有文本层的 PDF（如 arxiv 论文）-> `extracted/*.md`。扫描版 PDF（文本层空）自动跳过，交给 `ocr_scanned.py`。
+**用途：** 遍历 raw/，用 docling 把所有支持格式文件转成 `extracted/*.md`。
 
 **用法：**
 ```bash
-python extract_pdf.py \
-  --raw "D:/raw app/RawMaterialCollector/RAG/raw" \
-  --out "D:/raw app/RawMaterialCollector/RAG/extracted"
-```
-
-**逻辑：**
-1. pypdf 逐页提取文本
-2. 判定 born-digital vs 扫描版：`文本字符数 / 页数 < 100` -> 扫描版，跳过
-3. 截断：> 12000 字符 -> 前 8000 + 后 3000（和 Research 上下文预算对齐）
-4. 输出 `.md` 到 extracted/，文件头标 Source + Textized date + Method + Pages
-
----
-
-## ocr_scanned.py - 扫描版 PDF / 图片 OCR（全本地）
-
-**用途：** 处理 `extract_pdf.py` 跳过的扫描版 PDF + 图片（.png/.jpg）-> `extracted/*.md`。**无 API，全本地。**
-
-**用法：**
-```bash
-# PaddleOCR（默认，推荐 -- 中文质量强）
-python ocr_scanned.py \
-  --raw "D:/raw app/RawMaterialCollector/RAG/raw" \
-  --out "D:/raw app/RawMaterialCollector/RAG/extracted" \
-  --backend paddleocr --lang ch --include-images
-
-# Tesseract（轻量备选）
-python ocr_scanned.py \
-  --raw "..." --out "..." --backend tesseract --include-images
-```
-
-**两种 backend 对比：**
-| backend | 中文质量 | 速度 | 依赖 | 适用 |
-|---|---|---|---|---|
-| **paddleocr**（默认） | ⭐⭐⭐⭐⭐ | 中 | PaddlePaddle + 模型（~100MB） | 推荐，尤其中文/复杂版面 |
-| tesseract | ⭐⭐ | 快 | Tesseract + poppler | 轻量、英文/简单扫描件 |
-
-**逻辑：**
-1. 扫描 raw/ 找扫描版 PDF（pypdf 提取文本 < 100 字符/页）+ 图片（`--include-images`）
-2. 按选定的 backend OCR（PaddleOCR / Tesseract，**都本地**）
-3. PDF 先 `pdf2image` 转图片再逐页 OCR
-4. 截断 + 输出 `.md`（同 extract_pdf.py 的截断策略 + 文件头）
-
----
-
-## 完整 Textize 流程（对一个 topic）
-
-```bash
+PY="C:/Users/fuker/AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe"
 RAW="D:/raw app/RawMaterialCollector/RAG/raw"
 OUT="D:/raw app/RawMaterialCollector/RAG/extracted"
-PY="C:/Users/fuker/AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe"
 
-# 1. born-digital PDF（arxiv 论文等）
+# 默认（docling 内置 OCR，英文/通用）
+"$PY" textize/scripts/textize.py --raw "$RAW" --out "$OUT"
+
+# 中文扫描版 PDF / 图片：用 RapidOCR（PaddleOCR ONNX 版，中文强）
+"$PY" textize/scripts/textize.py --raw "$RAW" --out "$OUT" --ocr rapidocr
+
+# 限定格式
+"$PY" textize/scripts/textize.py --raw "$RAW" --out "$OUT" --exts .pdf,.docx
+```
+
+**逻辑：**
+1. 遍历 raw/，按扩展名筛选（默认 .pdf/.docx/.pptx/.html/.png/.jpg/.epub 等）
+2. 每个文件 `docling.convert()` -> Markdown
+3. 截断 > 12000 字符（前 8000 + 后 3000，对齐 Research 上下文预算）
+4. 输出 `extracted/<stem>.md`，文件头标 Source + Textized date + Method + OCR
+
+**默认处理扩展名：** `.pdf .docx .doc .pptx .html .htm .png .jpg .jpeg .epub`
+（.md/.txt 直通，不经 docling -- 待实现 passthrough）
+
+---
+
+## extract_pdf.py - 轻量备选（pypdf，不装 docling 时用）
+
+**用途：** 只处理 born-digital PDF（arxiv 论文等），用 pypdf 轻量提取，不装 docling。
+
+**用法：**
+```bash
 "$PY" textize/scripts/extract_pdf.py --raw "$RAW" --out "$OUT"
+```
 
-# 2. 扫描版 PDF + 图片（如果有，PaddleOCR 本地）
-"$PY" textize/scripts/ocr_scanned.py --raw "$RAW" --out "$OUT" --backend paddleocr --lang ch --include-images
+扫描版 PDF 自动跳过（文本/页 < 100 字符）。适合"只测 born-digital PDF、不想装 docling"的场景。生产用 textize.py（docling）。
 
-# 3.（待实现）clean_html.py - HTML 去噪
-# 4.（待实现）extract_docx.py - DOCX 提取
-# 5. .md/.txt 直通（复制到 extracted/，或轻清理）
+---
+
+## ocr_scanned.py - 已废弃（docling 内置 OCR 替代）
+
+保留作参考（PaddleOCR / Tesseract 直接调用版），但**生产用 textize.py + docling**（docling 内部 OCR 统一处理，不用单独 ocr_scanned.py）。v1.5 可能删除。
+
+---
+
+## 完整 Textize 流程
+
+```bash
+PY="C:/Users/fuker/AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe"
+RAW="D:/raw app/RawMaterialCollector/RAG/raw"
+OUT="D:/raw app/RawMaterialCollector/RAG/extracted"
+
+# 一次性文本化所有格式（docling 统一处理）
+"$PY" textize/scripts/textize.py --raw "$RAW" --out "$OUT" --ocr rapidocr
 
 # 之后 ② Research 读 $OUT/*.md，不再碰 $RAW
 ```
@@ -103,14 +99,13 @@ PY="C:/Users/fuker/AppData/Local/hermes/hermes-agent/venv/Scripts/python.exe"
 
 ## v1.0-20260720 状态
 
-- ✅ `extract_pdf.py` - 可用（pypdf born-digital 提取）
-- 🟡 `ocr_scanned.py` - PaddleOCR + Tesseract 两本地 backend，骨架完整，需装依赖 + 真实测试
-- 🔲 `clean_html.py` - 待实现（从 `00-fetch/scripts/fetch_docs_and_arxiv.py` 的 `html_to_text` 提炼）
-- 🔲 `extract_docx.py` - 待实现（python-docx 或 pandoc）
-- 🔲 `.md/.txt` 直通逻辑 - 待实现
+- ✅ `textize.py` - docling 统一文本化（PDF/DOCX/HTML/图片/PPTX/EPub），可配 OCR 引擎（rapidocr 中文强）
+- ✅ `extract_pdf.py` - pypdf 轻量备选（born-digital PDF）
+- 🟡 `ocr_scanned.py` - 已废弃（docling 内置 OCR 替代），保留参考
+- 🔲 `.md/.txt` 直通逻辑 - 待加（textize.py 跳过或轻清理复制）
 
-v1.5 计划：补全 clean_html.py / extract_docx.py / 直通逻辑 + PaddleOCR 真实测试 + 缓存（文件未变跳过）。
+v1.5 计划：textize.py 加 .md/.txt passthrough + 缓存（文件未变跳过）+ 真实 OCR 测试。
 
 ---
 
-*相关：`textize/README.md`（spec）/ `00-fetch/scripts/`（抓取侧脚本，部分可复用）/ `docs/versioning.md`（版本原则）*
+*相关：`textize/README.md`（spec）/ `docs/versioning.md`（版本原则）*
