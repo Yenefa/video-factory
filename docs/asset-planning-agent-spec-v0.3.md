@@ -102,8 +102,11 @@ Each job must include these fields:
 - `job_id`, `scene_id`, `stage`, and `stage_boundary`
 - `route`, `asset_type`, `purpose`, `reusable`, and `output`
 - `source` with `kind`, `reference`, `license`, `creator_or_publisher`, `attribution`, `ancestor_asset_id`, and `unknown_reason`
+- `source_metadata` with `creator_or_publisher`, `attribution`, `ancestor_asset_id`, and `unknown_reason`
 - `cost_status: "unknown"`
 - `handoff` describing the non-timed dependency supplied to Storyboard
+
+`source_metadata` is the job-level route-conditional provenance payload. When a job becomes an asset manifest record, map each `source_metadata` key to the identically named field in `source`. For `ai_generate` and `code`, all four `source_metadata` values must be `null`. The route-specific source requirements above apply to `source_metadata` at planning time and to `source` after persistence.
 
 `ai_generate` jobs additionally include a narrative-safe `prompt` and the fixed automatic-generation policy. Prompts should describe atmosphere, composition, and non-factual symbolic content; they must not state factual assertions.
 

@@ -48,6 +48,12 @@
         "reference": "generator-output:asset-scene-01-context-desk-atmosphere",
         "license": "unknown"
       },
+      "source_metadata": {
+        "creator_or_publisher": null,
+        "attribution": null,
+        "ancestor_asset_id": null,
+        "unknown_reason": null
+      },
       "cost_status": "unknown",
       "handoff": "Background plate only; Storyboard determines crop and timing."
     },
@@ -81,6 +87,12 @@
         "kind": "generated",
         "reference": "generator-output:asset-scene-02-document-flood-atmosphere",
         "license": "unknown"
+      },
+      "source_metadata": {
+        "creator_or_publisher": null,
+        "attribution": null,
+        "ancestor_asset_id": null,
+        "unknown_reason": null
       },
       "cost_status": "unknown",
       "handoff": "Atmosphere plate only; deterministic overlay elements remain separate assets."
@@ -116,6 +128,12 @@
         "reference": "generator-output:asset-scene-05-selection-gate-atmosphere",
         "license": "unknown"
       },
+      "source_metadata": {
+        "creator_or_publisher": null,
+        "attribution": null,
+        "ancestor_asset_id": null,
+        "unknown_reason": null
+      },
       "cost_status": "unknown",
       "handoff": "Closing plate only; Storyboard determines the final hold."
     },
@@ -142,6 +160,12 @@
         "kind": "internal",
         "reference": "component:ContextOverloadDiagram",
         "license": "owned"
+      },
+      "source_metadata": {
+        "creator_or_publisher": null,
+        "attribution": null,
+        "ancestor_asset_id": null,
+        "unknown_reason": null
       },
       "cost_status": "unknown",
       "handoff": "Reusable diagram component; Storyboard supplies state changes and timing."
