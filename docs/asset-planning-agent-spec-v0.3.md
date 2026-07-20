@@ -101,7 +101,7 @@ Each job must include these fields:
 
 - `job_id`, `scene_id`, `stage`, and `stage_boundary`
 - `route`, `asset_type`, `purpose`, `reusable`, and `output`
-- `source` with `kind`, `reference`, `license`, `creator_or_publisher`, `attribution`, `ancestor_asset_id`, and `unknown_reason`
+- `source` with `kind`, `reference`, and `license`
 - `source_metadata` with `creator_or_publisher`, `attribution`, `ancestor_asset_id`, and `unknown_reason`
 - `cost_status: "unknown"`
 - `handoff` describing the non-timed dependency supplied to Storyboard
