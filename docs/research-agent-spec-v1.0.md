@@ -166,13 +166,16 @@ Research Agent 应主动完成：
 
 # Input
 
-输入永远只有一个：
+输入是 Textize（上方服务）的输出 —— 文本化后的干净 .md：
 
 ```text
 Topic/
 
-    raw/
+    extracted/
+        *.md   (Textize 从 raw/ 文本化而来)
 ```
+
+**Textize 负责 raw 文件（PDF / 图片 / HTML / DOCX）-> 干净 .md**（见 `textize/README.md`）。Research 只消费 `extracted/`，**不碰文件解析 / PDF 提取 / OCR**——那些是 Textize 的职责。
 
 其中可能包含：
 
@@ -208,7 +211,7 @@ Research Agent 不关心来源形式。
 
 ## Step 1 - Read
 
-读取全部资料。
+读取 `extracted/` 全部 .md（Textize 已文本化）。
 
 不要遗漏任何文件。
 
