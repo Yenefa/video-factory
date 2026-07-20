@@ -2,6 +2,7 @@ node_modules
 dist
 dist-ssr
 *.local
+.worktrees/
 src-tauri/target
 src-tauri/gen
 .DS_Store
