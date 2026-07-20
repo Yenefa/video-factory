@@ -6,8 +6,8 @@
 ---
 
 # Research Agent Specification v1.0
-> **版本原则：** 见 [versioning.md](./versioning.md)（Oracle 风格：Major / Release Update / Patch 三层）。本 Spec 当前 **v1.0**。
-> **v2.0 计划**（下一 Major，加新规则）：扫描版 PDF OCR fallback / 上下文不足分批读取协议 / 来源 ID 校验 / 文件名从内容提取 / SPA 自动 fallback。
+> **版本原则：** 见 [versioning.md](./versioning.md)（Anthropic 风格：家族代数 / 小版本 / 日期戳）。本 Spec 当前 **v1.0-20260720**。
+> **v1.5 计划**（下一小版本，加新能力，Anthropic 风格）：扫描版 PDF OCR fallback / 上下文不足分批读取协议 / 来源 ID 校验 / 文件名从内容提取 / SPA 自动 fallback。
 
 
 ## Mission
