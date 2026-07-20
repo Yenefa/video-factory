@@ -2,11 +2,13 @@
 
 An AI video-production pipeline. Each stage is a self-contained tool; together they turn raw research material into a finished MP4.
 
+## 主流程（9 层）
+
 | # | Stage | Purpose | Status |
 |---|-------|---------|--------|
-| ⓪ | **Fetch** | Actively harvest materials from the web (docs, papers, Reddit, blogs) | ✅ v1.0 · 2026-07-20 |
-| ① | **Collect** | Gather all raw materials (container, also receives manual drops) | ✅ done · 2026-07-20 |
-| ② | **Research** | Distill credible knowledge | ✅ v1.0 done · 2026-07-20 (RAG topic, 48 sources -> research package) |
+| ⓪ | **Fetch** | Actively harvest materials from the web (docs, papers, Reddit, blogs) | ✅ v1.0-20260720 |
+| ① | **Collect (Raw)** | Gather all raw materials (container, also receives manual drops) | ✅ v1.0-20260720 |
+| ② | **Research** | Distill credible knowledge | ✅ v1.0-20260720 (RAG topic, 48 sources -> research package) |
 | ③ | **Script** | Turn knowledge into a narration script | 🔲 planned |
 | ④ | **Visual Language** | Translate each abstract line into a visual expression (metaphor, diagram, flow, icon) | 🔲 planned |
 | ⑤ | **Asset Planning** | List every asset this episode needs (SVG, icons, logos, illustrations, AI images) | 🔲 planned |
@@ -14,7 +16,29 @@ An AI video-production pipeline. Each stage is a self-contained tool; together t
 | ⑦ | **HyperFrames** | Auto-generate the HTML / CSS / GSAP animation engineering | 🔲 planned |
 | ⑧ | **Render** | Export the MP4 | 🔲 planned |
 
-> **Layout note:** stage ⓪ (Fetch) lives in `00-fetch/`. Stage ① (Collect) code lives at the repo root (`src/`, `src-tauri/`). When later stages arrive the tree will be reorganized into per-stage directories (`01-collect/`, `02-research/`, ...) via `git mv`, so history is preserved.
+## Textize（上方横切服务，不占层号）
+
+Textize 是上方基础设施服务，作用点在 ① Raw 和 ② Research 之间：从 raw 取文件，文本化成干净 `.md`，从上方"箭头指下"喂给 research（及未来任何需要文本的层）。**它不是流程串联层，主流程 9 层不变。**
+
+```
+                    ┌─────────────────────────────────┐
+                    │            Textize                │  ← 上方服务（不占层号）
+                    │     raw 文件  ->  干净 .md 文本     │
+                    │  · born-digital PDF  -> pypdf      │
+                    │  · 扫描版 PDF / 图片 -> OCR/VLM     │
+                    │  · HTML              -> 去噪提正文  │
+                    │  · DOCX              -> 提取        │
+                    └────────────────┬──────────────────┘
+                                     │ 文本（.md）
+                                     ↓ extracted/
+  ⓪ Fetch  ->  ① Raw  ->  ② Research  ->  ③ Script  ->  ④ Visual  ->  …  ->  ⑧ Render
+                                  ↑ 消费 extracted/，不再碰文件解析
+```
+
+- **Spec:** [`textize/README.md`](./textize/README.md)
+- **Status:** v1.0-20260720 spec only. Scripts planned for v1.5. Interim: reuse `00-fetch/scripts/extract_pdf_text.py` for born-digital PDF pypdf extraction.
+
+> **Layout note:** stage ⓪ (Fetch) lives in `00-fetch/`. Textize (上方服务) lives in `textize/` (no number - it's a service, not a flow stage). Stage ① (Collect) code lives at the repo root (`src/`, `src-tauri/`). When later stages arrive the tree will be reorganized into per-stage directories via `git mv`. **Versioning is Anthropic-style** (family / minor / date-stamp), see `docs/versioning.md`.
 
 ---
 
@@ -23,11 +47,11 @@ An AI video-production pipeline. Each stage is a self-contained tool; together t
 The upstream feeder. Given a topic, it actively harvests materials from the web (official docs, arxiv papers, Reddit, blogs, GitHub) and writes them into stage ① Collect's `raw/` directory. Fetch is the active harvester; Collect is the passive container.
 
 - **Spec & overview:** [`00-fetch/README.md`](./00-fetch/README.md)
-- **Lessons learned (problems + solutions from the RAG first run):** [`00-fetch/lessons-learned.md`](./00-fetch/lessons-learned.md)
-- **Sources playbook (per-source-type method):** [`00-fetch/sources-playbook.md`](./00-fetch/sources-playbook.md)
-- **Scripts:** [`00-fetch/scripts/`](./00-fetch/scripts/) (Python `requests` for docs/arxiv, `puppeteer-core` + Edge for Reddit/SPA)
+- **Lessons learned:** [`00-fetch/lessons-learned.md`](./00-fetch/lessons-learned.md)
+- **Sources playbook:** [`00-fetch/sources-playbook.md`](./00-fetch/sources-playbook.md)
+- **Scripts:** [`00-fetch/scripts/`](./00-fetch/scripts/)
 
-**First run (2026-07-20, RAG topic):** 48 materials harvested in 3 rounds - 13 official docs (.md) + 21 arxiv papers (.pdf) + 14 Reddit r/Rag posts (.md), 49 MB. Broke Reddit's 403 anti-bot wall with puppeteer + real Edge. Known issues (wrong arxiv ID for CRAG, mislabeled filename, PDF truncation, 7 Reddit posts unread) recorded in `00-fetch/lessons-learned.md` and fed into v1.1 iteration.
+**First run (2026-07-20, RAG topic):** 48 materials harvested - 13 official docs (.md) + 21 arxiv papers (.pdf) + 14 Reddit r/Rag posts (.md), 49 MB. Broke Reddit's 403 anti-bot wall with puppeteer + real Edge.
 
 ---
 
@@ -35,7 +59,7 @@ The upstream feeder. Given a topic, it actively harvests materials from the web 
 
 A Windows-first desktop app that is the **container** for all raw materials - both those harvested by stage ⓪ Fetch and those the user manually drops/pastes.
 
-It is a **container** - not a note app, not a knowledge base, not an AI app. No AI, no organization, no summaries, no classification, no dedup. You throw files in; later stages process them.
+It is a **container** - not a note app, not a knowledge base, not an AI app. No AI, no organization, no summaries, no classification, no dedup. You throw files in; Textize (上方服务) and ② Research process them later.
 
 Built with **Tauri 2 + React + TypeScript + Tailwind CSS**.
 
@@ -66,6 +90,7 @@ Default workspace root is configurable in Settings. Each topic is a directory; e
   <Topic Name>\
     raw\           ← stage ⓪ Fetch writes here; stage ① Collect also drops here
       <original files, untouched>
+    extracted\     ← Textize writes here (clean .md) - 上方服务输出
     research\      ← stage ② Research writes here (research package)
 ```
 
@@ -92,12 +117,8 @@ npm run tauri:build  # produces an installer under src-tauri/target/release/bund
 ### Project structure
 
 ```
-├── 00-fetch/              ← stage ⓪ (Fetch workflow: spec, lessons, scripts)
-│   ├── README.md
-│   ├── lessons-learned.md
-│   ├── sources-playbook.md
-│   ├── scripts/
-│   └── config/
+├── 00-fetch/              ← stage ⓪ (Fetch workflow)
+├── textize/               ← 上方服务（Textize spec，scripts TBD）- 无编号
 ├── package.json           ← stage ① (Collect app)
 ├── vite.config.ts
 ├── tailwind.config.ts
@@ -121,6 +142,7 @@ npm run tauri:build  # produces an installer under src-tauri/target/release/bund
 │   └── icons\
 └── docs\
     ├── PLANNING.md        ← full project planning (2026-07-20 snapshot)
+    ├── versioning.md      ← Anthropic-style versioning policy
     ├── research-agent-spec-v1.0.md   ← stage ② spec
     └── superpowers\
         └── specs\
