@@ -1,34 +1,42 @@
 #!/usr/bin/env python3
 """Textize stage: OCR scanned PDFs and images in raw/ -> extracted/*.md.
 
-Handles the inputs that extract_pdf.py skips (scanned PDFs with no text layer)
-plus image files (.png/.jpg). Two OCR backends, selectable via --backend:
+**100% local, no API, no online, data stays on machine.**
 
-  --backend tesseract  : Tesseract + pdf2image (local, free, offline, private)
-  --backend mistral    : Mistral OCR API (higher quality, paid, online)
+Two local backends (selectable via --backend):
 
-This is a skeleton (v1.0-20260720 spec). Full implementation planned for
-Textize v1.5 alongside Research Spec v1.5.
+  --backend paddleocr  : PaddleOCR (Baidu, DEFAULT) - best Chinese quality,
+                         modern deep-learning OCR, supports layout/tables
+  --backend tesseract  : Tesseract + pdf2image - lightweight, traditional,
+                         Chinese quality mediocre
+
+Both run fully offline (PaddleOCR downloads models on first run, ~100MB).
 
 Prerequisites:
+  paddleocr: pip install paddlepaddle paddleocr pdf2image Pillow
+             + poppler for pdf2image (Windows: poppler-windows, add PATH)
+             First run downloads PP-OCR models (~100MB, cached locally)
   tesseract: pip install pytesseract pdf2image Pillow
-             + Tesseract OCR engine installed (Windows: Tesseract at UB Mannheim)
-             + poppler for pdf2image (Windows: poppler-windows)
-  mistral:   pip install mistralai
-             + MISTRAL_API_KEY env var set
+             + Tesseract engine (Windows: UB Mannheim Tesseract build)
+             + poppler for pdf2image
 
 Usage:
-    python ocr_scanned.py --raw "<raw dir>" --out "<extracted dir>" --backend tesseract
-    python ocr_scanned.py --raw "<raw dir>" --out "<extracted dir>" --backend mistral --include-images
+    # PaddleOCR (default, recommended - best Chinese)
+    python ocr_scanned.py --raw "<raw>" --out "<extracted>" --backend paddleocr
+    python ocr_scanned.py --raw "<raw>" --out "<extracted>" --lang ch --include-images
+
+    # Tesseract (lightweight fallback)
+    python ocr_scanned.py --raw "<raw>" --out "<extracted>" --backend tesseract
 """
 import re
 import argparse
+import tempfile
 from pathlib import Path
 
 HEADER_TEMPLATE = """> **Source:** {name}
 > **Textized:** {date}
-> **Method:** ocr-{backend}
-> **Pages/Items:** {count}
+> **Method:** ocr-{backend} (lang={lang})
+> **Type:** {kind}
 
 ---
 
@@ -52,46 +60,66 @@ def is_scanned_pdf(pdf_path):
     return (len(text) / npages) < SCANNED_THRESHOLD
 
 
-def ocr_tesseract_pdf(pdf_path):
-    """OCR a scanned PDF via Tesseract + pdf2image. Returns text."""
-    import pytesseract
+# ---------------------------------------------------------------------------
+# PaddleOCR backend (default, recommended)
+# ---------------------------------------------------------------------------
+
+def _paddleocr_instance(lang):
+    from paddleocr import PaddleOCR
+    # PaddleOCR 3.x API; use_angle_cls auto in 3.x. lang: ch / en / japan / ...
+    return PaddleOCR(lang=lang)
+
+
+def ocr_paddleocr_image(img_path, lang='ch'):
+    """OCR an image via PaddleOCR. Returns text."""
+    ocr = _paddleocr_instance(lang)
+    result = ocr.ocr(str(img_path))
+    if not result or not result[0]:
+        return ""
+    lines = []
+    for entry in result[0]:
+        # PaddleOCR: entry = [box, (text, confidence)]
+        try:
+            lines.append(entry[1][0])
+        except (IndexError, TypeError):
+            continue
+    return "\n".join(lines)
+
+
+def ocr_paddleocr_pdf(pdf_path, lang='ch'):
+    """OCR a scanned PDF via PaddleOCR (pdf2image -> per-page OCR)."""
     from pdf2image import convert_from_path
     images = convert_from_path(str(pdf_path))
-    parts = []
+    texts = []
     for img in images:
-        parts.append(pytesseract.image_to_string(img))
-    return "\n".join(parts)
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+            tmp_path = tmp.name
+        try:
+            img.save(tmp_path)
+            texts.append(ocr_paddleocr_image(tmp_path, lang))
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+    return "\n".join(texts)
 
+
+# ---------------------------------------------------------------------------
+# Tesseract backend (lightweight fallback)
+# ---------------------------------------------------------------------------
 
 def ocr_tesseract_image(img_path):
-    """OCR an image via Tesseract + PIL. Returns text."""
     import pytesseract
     from PIL import Image
     return pytesseract.image_to_string(Image.open(str(img_path)))
 
 
-def ocr_mistral(file_path):
-    """OCR via Mistral OCR API. Returns text.
+def ocr_tesseract_pdf(pdf_path):
+    import pytesseract
+    from pdf2image import convert_from_path
+    images = convert_from_path(str(pdf_path))
+    return "\n".join(pytesseract.image_to_string(img) for img in images)
 
-    Skeleton - adjust to mistralai SDK version installed.
-    """
-    import os
-    from mistralai import Mistral
-    api_key = os.environ.get("MISTRAL_API_KEY")
-    if not api_key:
-        raise RuntimeError("MISTRAL_API_KEY env var not set")
-    client = Mistral(api_key=api_key)
-    with open(str(file_path), "rb") as f:
-        uploaded = client.files.upload(file={"file_name": file_path.name, "file": f})
-    signed = client.files.get_signed_url(file_id=uploaded.id)
-    ocr_resp = client.ocr.process(
-        model="mistral-ocr-latest",
-        document={"type": "document_url", "document_url": signed.url})
-    # SDK version differences: try .pages[].markdown, fallback to str
-    if hasattr(ocr_resp, "pages") and ocr_resp.pages:
-        return "\n\n".join(p.markdown for p in ocr_resp.pages if hasattr(p, "markdown"))
-    return str(ocr_resp)
 
+# ---------------------------------------------------------------------------
 
 def truncate(text, max_chars=12000, head=8000, tail=3000):
     if len(text) <= max_chars:
@@ -102,10 +130,13 @@ def truncate(text, max_chars=12000, head=8000, tail=3000):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Textize: OCR scanned PDFs + images -> .md")
+    ap = argparse.ArgumentParser(description="Textize: OCR scanned PDFs + images -> .md (local only)")
     ap.add_argument("--raw", required=True, help="raw/ directory (input)")
     ap.add_argument("--out", required=True, help="extracted/ directory (output)")
-    ap.add_argument("--backend", choices=["tesseract", "mistral"], default="tesseract")
+    ap.add_argument("--backend", choices=["paddleocr", "tesseract"],
+                    default="paddleocr", help="OCR backend (default: paddleocr)")
+    ap.add_argument("--lang", default="ch",
+                    help="paddleocr lang: ch / en / japan / korean / ... (default: ch)")
     ap.add_argument("--include-images", action="store_true",
                     help="also OCR .png/.jpg/.jpeg images")
     ap.add_argument("--date", default="2026-07-20")
@@ -127,23 +158,24 @@ def main():
         for ext in ("*.png", "*.jpg", "*.jpeg"):
             targets.extend(sorted(raw.glob(ext)))
 
-    print(f"backend: {args.backend}, targets: {len(targets)}")
+    print(f"backend: {args.backend}, lang: {args.lang}, targets: {len(targets)}")
 
     ok = failed = 0
     for target in targets:
         try:
-            if target.suffix.lower() == ".pdf":
-                if args.backend == "tesseract":
+            is_pdf = target.suffix.lower() == ".pdf"
+            if is_pdf:
+                if args.backend == "paddleocr":
+                    text = ocr_paddleocr_pdf(target, args.lang)
+                else:
                     text = ocr_tesseract_pdf(target)
-                else:
-                    text = ocr_mistral(target)
-                count = len(pypdf.PdfReader(str(target)).pages) if args.backend == "tesseract" else "?"
+                kind = "scanned-pdf"
             else:
-                if args.backend == "tesseract":
-                    text = ocr_tesseract_image(target)
+                if args.backend == "paddleocr":
+                    text = ocr_paddleocr_image(target, args.lang)
                 else:
-                    text = ocr_mistral(target)
-                count = 1
+                    text = ocr_tesseract_image(target)
+                kind = "image"
             text = re.sub(r'\s+', ' ', text).strip()
             if len(text) < 50:
                 print(f"SKIP (OCR empty): {target.name}")
@@ -153,7 +185,7 @@ def main():
             md.write_text(
                 HEADER_TEMPLATE.format(
                     name=target.name, date=args.date,
-                    backend=args.backend, count=count, body=body),
+                    backend=args.backend, lang=args.lang, kind=kind, body=body),
                 encoding="utf-8")
             ok += 1
             print(f"OK   {target.name:50s} -> {md.name} ({len(body):,} ch)")

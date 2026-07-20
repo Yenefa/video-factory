@@ -68,12 +68,11 @@ Textize 是 Video Factory 的**上方横切服务**，作用点在 ① Raw 和 �
 
 | 工具 | 类型 | 优点 | 缺点 |
 |---|---|---|---|
-| **Tesseract + OCRmyPDF** | 本地开源免费 | 零成本、离线、私有 | 中文/复杂排版质量一般 |
-| **Mistral OCR** | API | 质量高、多语言、支持表格/公式 | 收费、需联网、数据出本地 |
+| **PaddleOCR**（百度） | 本地开源免费 | 中文质量强、现代 DL OCR、支持版面/表格 | 依赖 PaddlePaddle（~几百MB）、首次下模型 ~100MB |
+| **Tesseract + OCRmyPDF** | 本地开源免费 | 轻量、纯离线 | 中文/复杂排版质量一般 |
 | **docling (IBM)** | 本地开源 | 处理混合排版/表格强、输出 Markdown | 较重、依赖多 |
-| **VLM（GPT-4o vision / Claude vision）** | API | 能描述图像内容（不只 OCR） | 收费、慢、适合图片描述而非纯 OCR |
 
-**选型原则：** 私有数据优先 Tesseract/docling（本地）；质量优先 Mistral OCR；图片内容理解用 VLM。按 topic 需求配。
+**选型原则：** 全本地，无 API。默认 PaddleOCR（中文强、质量高）；轻量备选 Tesseract；混合排版强用 docling。按 topic 语言/版面复杂度配。
 
 ---
 
