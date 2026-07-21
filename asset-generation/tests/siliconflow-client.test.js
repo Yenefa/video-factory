@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import {EventEmitter} from "node:events";
+import {Readable} from "node:stream";
 import test from "node:test";
 
 import {
@@ -257,71 +259,184 @@ test("generation rejects unsafe returned image URLs without exposing them", asyn
   }
 });
 
-test("download returns buffered bytes and content type without Authorization", async () => {
+const publicLookup = (_hostname, options, callback) => {
+  assert.deepEqual(options, {all: true, verbatim: true});
+  callback(null, [{address: "93.184.216.34", family: 4}]);
+};
+
+const imageResponse = ({chunks = [new Uint8Array([1, 2, 3])], statusCode = 200, headers = {"content-type": "image/png"}} = {}) => {
+  const response = Readable.from(chunks);
+  response.statusCode = statusCode;
+  response.headers = headers;
+  return response;
+};
+
+const downloadTransport = ({response = imageResponse(), requestError} = {}) => {
   const calls = [];
-  const fetchImpl = async (...args) => {
-    calls.push(args);
-    return new Response(new Uint8Array([1, 2, 3]), {
-      status: 200,
-      headers: {"content-type": "image/png"},
-    });
+  const requestImpl = (url, options, onResponse) => {
+    const request = new EventEmitter();
+    const call = {url, options, pinned: undefined};
+    calls.push(call);
+    request.end = () => {
+      options.lookup(url.hostname, {}, (error, address, family) => {
+        call.pinned = {address, family};
+        queueMicrotask(() => {
+          if (error) request.emit("error", error);
+          else if (requestError) request.emit("error", requestError);
+          else onResponse(response);
+        });
+      });
+    };
+    return request;
+  };
+  return {calls, requestImpl, response};
+};
+
+test("download pins a validated public resolution for TLS and returns bytes", async () => {
+  const harness = downloadTransport();
+  const lookupCalls = [];
+  const lookupImpl = (hostname, options, callback) => {
+    lookupCalls.push({hostname, options});
+    callback(null, [
+      {address: "93.184.216.34", family: 4},
+      {address: "2606:2800:220:1:248:1893:25c8:1946", family: 6},
+    ]);
   };
 
-  const result = await downloadImage({url: "https://temporary.example/image.png", fetchImpl});
+  const result = await downloadImage({
+    url: "https://temporary.example/image.png",
+    requestImpl: harness.requestImpl,
+    lookupImpl,
+    fetchImpl: async () => { throw new Error("legacy fetch transport used"); },
+  });
 
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], "https://temporary.example/image.png");
-  assert.equal(calls[0][1].redirect, "error");
-  assert.equal(calls[0][1]?.headers?.Authorization, undefined);
+  assert.equal(harness.calls.length, 1);
+  assert.equal(harness.calls[0].url.href, "https://temporary.example/image.png");
+  assert.equal(harness.calls[0].options.method, "GET");
+  assert.equal(harness.calls[0].options.servername, "temporary.example");
+  assert.equal(harness.calls[0].options.headers.Authorization, undefined);
+  assert.deepEqual(lookupCalls, [{
+    hostname: "temporary.example",
+    options: {all: true, verbatim: true},
+  }]);
+  assert.deepEqual(harness.calls[0].pinned, {address: "93.184.216.34", family: 4});
   assert.ok(Buffer.isBuffer(result.bytes));
   assert.deepEqual([...result.bytes], [1, 2, 3]);
   assert.equal(result.contentType, "image/png");
 });
 
-test("download errors hide the temporary URL and response body and are not retried", async (t) => {
-  const unsafeUrl = "https://temporary.example/private-token.png";
-  for (const scenario of [
-    {
-      name: "HTTP failure",
-      fetchImpl: async () => new Response("private response body", {status: 403}),
-      expected: "image download failed with HTTP 403",
-    },
-    {
-      name: "network failure",
-      fetchImpl: async () => { throw new Error(`private response body ${unsafeUrl}`); },
-      expected: "image download request failed",
-    },
+test("download rejects a public-looking hostname resolving to loopback before sending", async () => {
+  const harness = downloadTransport();
+  const lookupImpl = (_hostname, options, callback) => {
+    assert.deepEqual(options, {all: true, verbatim: true});
+    callback(null, [{address: "127.0.0.1", family: 4}]);
+  };
+
+  await assert.rejects(
+    () => downloadImage({
+      url: "https://public-looking.example/image.png",
+      requestImpl: harness.requestImpl,
+      lookupImpl,
+      fetchImpl: async () => { throw new Error("legacy fetch transport used"); },
+    }),
+    (error) => error.message === "image download resolved to a non-public address",
+  );
+  assert.equal(harness.calls.length, 1);
+  assert.equal(harness.response.readableDidRead, false);
+});
+
+test("download rejects all DNS results when any A or AAAA address is non-public", async () => {
+  const harness = downloadTransport();
+  const lookupImpl = (_hostname, _options, callback) => callback(null, [
+    {address: "93.184.216.34", family: 4},
+    {address: "fd00::1", family: 6},
+  ]);
+
+  await assert.rejects(
+    () => downloadImage({
+      url: "https://mixed.example/image.png",
+      requestImpl: harness.requestImpl,
+      lookupImpl,
+      fetchImpl: async () => { throw new Error("legacy fetch transport used"); },
+    }),
+    /resolved to a non-public address/,
+  );
+});
+
+test("download rejects reserved, documentation, and multicast DNS addresses", async (t) => {
+  for (const resolved of [
+    {address: "192.0.2.1", family: 4},
+    {address: "224.0.0.1", family: 4},
+    {address: "2001:db8::1", family: 6},
+    {address: "ff02::1", family: 6},
   ]) {
-    await t.test(scenario.name, async () => {
-      let attempts = 0;
-      const fetchImpl = async (...args) => {
-        attempts += 1;
-        return scenario.fetchImpl(...args);
-      };
+    await t.test(resolved.address, async () => {
+      const harness = downloadTransport();
       await assert.rejects(
-        () => downloadImage({url: unsafeUrl, fetchImpl}),
-        (error) => error.message === scenario.expected
-          && !error.message.includes(unsafeUrl)
-          && !error.message.includes("private response body"),
+        () => downloadImage({
+          url: "https://public-looking.example/image.png",
+          requestImpl: harness.requestImpl,
+          lookupImpl: (_hostname, _options, callback) => callback(null, [resolved]),
+        }),
+        /resolved to a non-public address/,
       );
-      assert.equal(attempts, 1);
     });
   }
 });
 
-test("download rejects unsafe URLs before making a request", async (t) => {
+test("download errors hide the temporary URL and response details and are not retried", async (t) => {
+  const unsafeUrl = "https://temporary.example/private-token.png";
+  for (const scenario of [
+    {
+      name: "HTTP failure",
+      harness: downloadTransport({response: imageResponse({statusCode: 403, headers: {}})}),
+      expected: "image download failed with HTTP 403",
+    },
+    {
+      name: "network failure",
+      harness: downloadTransport({requestError: new Error(`private response body ${unsafeUrl}`)}),
+      expected: "image download request failed",
+    },
+  ]) {
+    await t.test(scenario.name, async () => {
+      await assert.rejects(
+        () => downloadImage({url: unsafeUrl, requestImpl: scenario.harness.requestImpl, lookupImpl: publicLookup}),
+        (error) => error.message === scenario.expected
+          && !error.message.includes(unsafeUrl)
+          && !error.message.includes("private response body"),
+      );
+      assert.equal(scenario.harness.calls.length, 1);
+    });
+  }
+});
+
+test("download never follows redirects", async () => {
+  const harness = downloadTransport({response: imageResponse({
+    statusCode: 302,
+    headers: {location: "https://127.0.0.1/private"},
+  })});
+
+  await assert.rejects(
+    () => downloadImage({
+      url: "https://temporary.example/image.png",
+      requestImpl: harness.requestImpl,
+      lookupImpl: publicLookup,
+    }),
+    /image download failed with HTTP 302/,
+  );
+  assert.equal(harness.calls.length, 1);
+});
+
+test("download rejects unsafe URLs before creating a request", async (t) => {
   for (const url of ["not a URL", ...forbiddenImageUrls]) {
     await t.test(url, async () => {
-      let attempts = 0;
+      const harness = downloadTransport();
       await assert.rejects(
-        () => downloadImage({url, fetchImpl: async () => {
-          attempts += 1;
-          return new Response(new Uint8Array([1]), {headers: {"content-type": "image/png"}});
-        }}),
+        () => downloadImage({url, requestImpl: harness.requestImpl, lookupImpl: publicLookup}),
         (error) => error.message === "image download URL is not allowed"
           && !error.message.includes(url),
       );
-      assert.equal(attempts, 0);
+      assert.equal(harness.calls.length, 0);
     });
   }
 });
@@ -329,10 +444,12 @@ test("download rejects unsafe URLs before making a request", async (t) => {
 test("download requires an image content type", async (t) => {
   for (const headers of [{}, {"content-type": "text/plain"}]) {
     await t.test(headers["content-type"] ?? "missing", async () => {
+      const harness = downloadTransport({response: imageResponse({headers})});
       await assert.rejects(
         () => downloadImage({
           url: "https://temporary.example/image.png",
-          fetchImpl: async () => new Response(new Uint8Array([1]), {headers}),
+          requestImpl: harness.requestImpl,
+          lookupImpl: publicLookup,
         }),
         (error) => error.message === "image download returned an unsupported content type",
       );
@@ -341,47 +458,60 @@ test("download requires an image content type", async (t) => {
 });
 
 test("download rejects a declared body larger than 20 MiB without reading it", async () => {
-  let readStarted = false;
-  const response = {
-    ok: true,
-    status: 200,
-    headers: new Headers({
-      "content-type": "image/png",
-      "content-length": "20971521",
-    }),
-    body: {getReader() { readStarted = true; }},
-  };
+  const response = imageResponse({headers: {
+    "content-type": "image/png",
+    "content-length": "20971521",
+  }});
+  const harness = downloadTransport({response});
 
   await assert.rejects(
     () => downloadImage({
       url: "https://temporary.example/image.png",
-      fetchImpl: async () => response,
+      requestImpl: harness.requestImpl,
+      lookupImpl: publicLookup,
     }),
     (error) => error.message === "image download exceeded the 20 MiB limit",
   );
-  assert.equal(readStarted, false);
+  assert.equal(response.readableDidRead, false);
 });
 
-test("download cancels a streamed body when it exceeds 20 MiB", async () => {
+test("download destroys a streamed response when it exceeds 20 MiB", async () => {
   const chunk = new Uint8Array(10 * 1024 * 1024);
-  let pulls = 0;
-  let cancelled = false;
-  const body = new ReadableStream({
-    pull(controller) {
-      pulls += 1;
-      controller.enqueue(pulls <= 2 ? chunk : new Uint8Array([1]));
-    },
-    cancel() {
-      cancelled = true;
-    },
-  });
+  const response = imageResponse({chunks: [chunk, chunk, new Uint8Array([1])]});
+  const harness = downloadTransport({response});
 
   await assert.rejects(
     () => downloadImage({
       url: "https://temporary.example/image.png",
-      fetchImpl: async () => new Response(body, {headers: {"content-type": "image/png"}}),
+      requestImpl: harness.requestImpl,
+      lookupImpl: publicLookup,
     }),
     (error) => error.message === "image download exceeded the 20 MiB limit",
   );
-  assert.equal(cancelled, true);
+  assert.equal(response.destroyed, true);
+});
+
+test("download checks chunk byteLength before converting an oversized chunk", async () => {
+  let destroyed = false;
+  const oversizedChunk = {
+    byteLength: 20971521,
+    valueOf() { throw new Error("Buffer.from was called"); },
+  };
+  const response = {
+    statusCode: 200,
+    headers: {"content-type": "image/png"},
+    destroy() { destroyed = true; },
+    async *[Symbol.asyncIterator]() { yield oversizedChunk; },
+  };
+  const harness = downloadTransport({response});
+
+  await assert.rejects(
+    () => downloadImage({
+      url: "https://temporary.example/image.png",
+      requestImpl: harness.requestImpl,
+      lookupImpl: publicLookup,
+    }),
+    (error) => error.message === "image download exceeded the 20 MiB limit",
+  );
+  assert.equal(destroyed, true);
 });

@@ -1,6 +1,11 @@
+import {lookup as dnsLookup} from "node:dns";
+import {request as httpsRequest} from "node:https";
+
 export const SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1";
 export const KOLORS_MODEL = "Kwai-Kolors/Kolors";
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
+class SafeDownloadError extends Error {}
 
 const authorizationHeaders = (apiKey) => ({Authorization: `Bearer ${apiKey}`});
 
@@ -31,11 +36,20 @@ const parseIpv4 = (hostname) => {
   return octets.every((octet) => octet >= 0 && octet <= 255) ? octets : undefined;
 };
 
-const isPrivateIpv4 = ([first, second]) => first === 127
+const isNonPublicIpv4 = ([first, second, third, fourth]) => first === 127
+  || first === 0
   || first === 10
+  || (first === 100 && second >= 64 && second <= 127)
   || (first === 172 && second >= 16 && second <= 31)
   || (first === 192 && second === 168)
-  || (first === 169 && second === 254);
+  || (first === 169 && second === 254)
+  || (first === 192 && second === 0 && third === 0 && fourth !== 9 && fourth !== 10)
+  || (first === 192 && second === 0 && third === 2)
+  || (first === 192 && second === 88 && third === 99)
+  || (first === 198 && (second === 18 || second === 19))
+  || (first === 198 && second === 51 && third === 100)
+  || (first === 203 && second === 0 && third === 113)
+  || first >= 224;
 
 const parseIpv6 = (hostname) => {
   const unwrapped = hostname.startsWith("[") && hostname.endsWith("]")
@@ -53,19 +67,82 @@ const parseIpv6 = (hostname) => {
   return parts.map((part) => Number.parseInt(part, 16));
 };
 
-const isPrivateIpv6 = (parts) => {
+const embeddedIpv4 = (parts, index) => [
+  parts[index] >> 8,
+  parts[index] & 0xff,
+  parts[index + 1] >> 8,
+  parts[index + 1] & 0xff,
+];
+
+const isNonPublicIpv6 = (parts) => {
   const loopback = parts.slice(0, 7).every((part) => part === 0) && parts[7] === 1;
   const unspecified = parts.every((part) => part === 0);
   const uniqueLocal = (parts[0] & 0xfe00) === 0xfc00;
   const linkLocal = (parts[0] & 0xffc0) === 0xfe80;
+  const siteLocal = (parts[0] & 0xffc0) === 0xfec0;
+  const multicast = (parts[0] & 0xff00) === 0xff00;
+  const discardOnly = parts[0] === 0x0100 && parts.slice(1, 4).every((part) => part === 0);
+  const documentation = parts[0] === 0x2001 && parts[1] === 0x0db8;
+  const benchmarking = parts[0] === 0x2001 && parts[1] === 0x0002 && parts[2] === 0;
+  const orchid = parts[0] === 0x2001 && ((parts[1] & 0xfff0) === 0x0010 || (parts[1] & 0xfff0) === 0x0020);
   const ipv4Mapped = parts.slice(0, 5).every((part) => part === 0) && parts[5] === 0xffff;
-  const mappedPrivate = ipv4Mapped && isPrivateIpv4([
-    parts[6] >> 8,
-    parts[6] & 0xff,
-    parts[7] >> 8,
-    parts[7] & 0xff,
-  ]);
-  return loopback || unspecified || uniqueLocal || linkLocal || mappedPrivate;
+  const ipv4Compatible = parts.slice(0, 6).every((part) => part === 0);
+  const nat64 = parts[0] === 0x0064 && parts[1] === 0xff9b && parts.slice(2, 6).every((part) => part === 0);
+  const sixToFour = parts[0] === 0x2002;
+  const embeddedNonPublic = (ipv4Mapped || ipv4Compatible || nat64)
+    && isNonPublicIpv4(embeddedIpv4(parts, 6));
+  const sixToFourNonPublic = sixToFour && isNonPublicIpv4(embeddedIpv4(parts, 1));
+  return loopback
+    || unspecified
+    || uniqueLocal
+    || linkLocal
+    || siteLocal
+    || multicast
+    || discardOnly
+    || documentation
+    || benchmarking
+    || orchid
+    || embeddedNonPublic
+    || sixToFourNonPublic;
+};
+
+const isPublicResolvedAddress = ({address, family}) => {
+  if (typeof address !== "string") return false;
+  if (family === 4 || family === "IPv4") {
+    const ipv4 = parseIpv4(address);
+    return Boolean(ipv4 && !isNonPublicIpv4(ipv4));
+  }
+  if (family === 6 || family === "IPv6") {
+    let canonicalHostname;
+    try {
+      canonicalHostname = new URL(`https://[${address}]/`).hostname;
+    } catch {
+      return false;
+    }
+    const ipv6 = parseIpv6(canonicalHostname);
+    return Boolean(ipv6 && !isNonPublicIpv6(ipv6));
+  }
+  return false;
+};
+
+const pinnedPublicLookup = (lookupImpl) => (hostname, _options, callback) => {
+  const onLookup = (error, addresses) => {
+    if (error || !Array.isArray(addresses) || addresses.length === 0) {
+      callback(new SafeDownloadError("image download address resolution failed"));
+      return;
+    }
+    if (addresses.some((address) => !isPublicResolvedAddress(address))) {
+      callback(new SafeDownloadError("image download resolved to a non-public address"));
+      return;
+    }
+    const [{address, family}] = addresses;
+    callback(null, address, family);
+  };
+  try {
+    lookupImpl(hostname, {all: true, verbatim: true}, onLookup);
+  } catch {
+    callback(new SafeDownloadError("image download address resolution failed"));
+  }
 };
 
 const parseSafeImageUrl = (value, errorMessage) => {
@@ -83,8 +160,8 @@ const parseSafeImageUrl = (value, errorMessage) => {
     || parsed.password !== ""
     || hostname === "localhost"
     || hostname.endsWith(".localhost")
-    || (ipv4 && isPrivateIpv4(ipv4))
-    || (ipv6 && isPrivateIpv6(ipv6))) {
+    || (ipv4 && isNonPublicIpv4(ipv4))
+    || (ipv6 && isNonPublicIpv6(ipv6))) {
     throw new Error(errorMessage);
   }
   return parsed.href;
@@ -153,46 +230,87 @@ export const createKolorsImage = async ({apiKey, job, fetchImpl = fetch}) => {
   };
 };
 
-export const downloadImage = async ({url, fetchImpl = fetch}) => {
+const openImageResponse = ({url, requestImpl, lookupImpl}) => new Promise((resolve, reject) => {
+  let request;
+  try {
+    request = requestImpl(url, {
+      method: "GET",
+      headers: {},
+      lookup: pinnedPublicLookup(lookupImpl),
+      servername: url.hostname,
+    }, resolve);
+    request.once("error", (error) => {
+      reject(error instanceof SafeDownloadError
+        ? error
+        : new SafeDownloadError("image download request failed"));
+    });
+    request.end();
+  } catch {
+    reject(new SafeDownloadError("image download request failed"));
+  }
+});
+
+const destroyResponse = (response) => {
+  try {
+    response.destroy?.();
+  } catch {
+    // Preserve the original sanitized error.
+  }
+};
+
+export const downloadImage = async ({url, requestImpl = httpsRequest, lookupImpl = dnsLookup}) => {
   const safeUrl = parseSafeImageUrl(url, "image download URL is not allowed");
-  const response = await requestOnce(fetchImpl, safeUrl, {redirect: "error"}, "image download");
-  if (!response.ok) throw new Error(`image download failed with HTTP ${response.status}`);
+  const parsedUrl = new URL(safeUrl);
+  const response = await openImageResponse({url: parsedUrl, requestImpl, lookupImpl});
+  if (!Number.isInteger(response.statusCode)) {
+    destroyResponse(response);
+    throw new SafeDownloadError("image download returned a malformed response");
+  }
+  if (response.statusCode < 200 || response.statusCode >= 300) {
+    destroyResponse(response);
+    throw new SafeDownloadError(`image download failed with HTTP ${response.statusCode}`);
+  }
 
-  const contentType = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
+  const rawContentType = response.headers?.["content-type"];
+  const contentType = typeof rawContentType === "string"
+    ? rawContentType.split(";", 1)[0].trim().toLowerCase()
+    : undefined;
   if (!contentType || !/^image\/[^\s/]+$/.test(contentType)) {
-    throw new Error("image download returned an unsupported content type");
+    destroyResponse(response);
+    throw new SafeDownloadError("image download returned an unsupported content type");
   }
-  const contentLength = response.headers.get("content-length");
+  const contentLength = response.headers?.["content-length"];
   if (/^\d+$/.test(contentLength ?? "") && BigInt(contentLength) > BigInt(MAX_IMAGE_BYTES)) {
-    throw new Error("image download exceeded the 20 MiB limit");
+    destroyResponse(response);
+    throw new SafeDownloadError("image download exceeded the 20 MiB limit");
   }
 
-  const reader = response.body?.getReader?.();
-  if (!reader) {
-    if (response.body === null) return {bytes: Buffer.alloc(0), contentType};
-    throw new Error("image download response failed");
-  }
   const chunks = [];
   let totalBytes = 0;
-  while (true) {
-    let result;
-    try {
-      result = await reader.read();
-    } catch {
-      throw new Error("image download response failed");
-    }
-    if (result.done) break;
-    const chunk = Buffer.from(result.value);
-    totalBytes += chunk.length;
-    if (totalBytes > MAX_IMAGE_BYTES) {
-      try {
-        await reader.cancel();
-      } catch {
-        // Ignore cancellation failures and preserve the safe size error.
+  try {
+    for await (const chunk of response) {
+      const chunkBytes = chunk?.byteLength;
+      if (!Number.isSafeInteger(chunkBytes) || chunkBytes < 0) {
+        destroyResponse(response);
+        throw new SafeDownloadError("image download response failed");
       }
-      throw new Error("image download exceeded the 20 MiB limit");
+      if (chunkBytes > MAX_IMAGE_BYTES - totalBytes) {
+        destroyResponse(response);
+        throw new SafeDownloadError("image download exceeded the 20 MiB limit");
+      }
+      let bufferedChunk;
+      try {
+        bufferedChunk = Buffer.from(chunk);
+      } catch {
+        destroyResponse(response);
+        throw new SafeDownloadError("image download response failed");
+      }
+      totalBytes += chunkBytes;
+      chunks.push(bufferedChunk);
     }
-    chunks.push(chunk);
+  } catch (error) {
+    if (error instanceof SafeDownloadError) throw error;
+    throw new SafeDownloadError("image download response failed");
   }
 
   return {
