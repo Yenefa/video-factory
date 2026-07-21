@@ -33,6 +33,22 @@ test("rejects more than three generation jobs", () => {
   );
 });
 
+test("rejects whitespace-padded generation sources over the limit", () => {
+  assert.throws(
+    () => validateAssetJobsDocument({
+      episode_id: "episode",
+      policy: {},
+      jobs: [
+        {...aiJob, source: " ai_generate "},
+        {...aiJob, id: "two", source: " ai_generate "},
+        {...aiJob, id: "three", source: " ai_generate "},
+        {...aiJob, id: "four", source: " ai_generate "},
+      ],
+    }),
+    /at most 3/,
+  );
+});
+
 test("rejects an unsupported Kolors image size and retry policy", () => {
   assert.throws(
     () => validateAssetJobsDocument({episode_id: "episode", policy: {retry_on_failure: true}, jobs: [aiJob]}),

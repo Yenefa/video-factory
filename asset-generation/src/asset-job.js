@@ -54,7 +54,7 @@ const validateJob = (job, index, jobIds) => {
   if (jobIds.has(id)) throw new Error(`job id must be unique: ${id}`);
   jobIds.add(id);
 
-  requiredString(job.scene_id, `jobs[${index}].scene_id`);
+  const sceneId = requiredString(job.scene_id, `jobs[${index}].scene_id`);
   const source = requiredString(job.source, `jobs[${index}].source`);
   if (!VALID_SOURCES.has(source)) throw new Error(`jobs[${index}].source is not supported`);
 
@@ -67,7 +67,7 @@ const validateJob = (job, index, jobIds) => {
     }
   }
 
-  return job;
+  return {...job, id, scene_id: sceneId, source};
 };
 
 export const validateAssetJobsDocument = (document) => {
