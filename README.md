@@ -11,7 +11,7 @@ An AI video-production pipeline. Each stage is a self-contained tool; together t
 | ② | **Research** | Distill credible knowledge | ✅ v1.0-20260720 (RAG topic, 48 sources -> research package) |
 | ③ | **Script** | Turn knowledge into a narration script | ✅ v2.0-20260721 spec + RAG draft + live-verified TTS/Timing (13 segments, 65.866 s at 1.2×) |
 | ④ | **Visual Language** | Translate each abstract line into an executable visual expression system | ✅ v0.1-20260721 spec + tracked RAG Visual Plan |
-| ⑤ | **Asset Planning** | List every asset this episode needs (SVG, icons, logos, illustrations, AI images) | 🔲 planned |
+| ⑤ | **Asset Planning** | List every asset this episode needs (SVG, icons, logos, illustrations, AI images) | ✅ v0.3-20260721 spec + constrained SiliconFlow Kolors generation + DPAPI launcher + RAG test-job fixture |
 | ⑥ | **Storyboard** | Shot order, duration, transitions, pacing | 🔲 planned |
 | ⑦ | **HyperFrames** | Auto-generate the HTML / CSS / GSAP animation engineering | 🔲 planned |
 | ⑧ | **Render** | Export the MP4 | 🔲 planned |
@@ -62,6 +62,15 @@ Visual Language 把 Script 的抽象概念、技术关系、情绪和叙事目�
 - **Spec:** [`docs/visual-language-agent-spec-v0.1.md`](./docs/visual-language-agent-spec-v0.1.md)
 - **Tracked example:** [`docs/examples/visual-language-v0.1-rag-plan.md`](./docs/examples/visual-language-v0.1-rag-plan.md)
 - **Status:** v0.1-20260721 ready; RAG episode covers 5 scenes and all 13 locked narration segments with one coherent table/document/selection visual grammar.
+
+## Asset Planning（⑤）
+
+Asset Planning turns the Visual Plan into a production inventory and can auto-generate at most three test images through SiliconFlow Kolors, with DPAPI-protected credentials and no per-image confirmation.
+
+- **Spec:** [`docs/asset-planning-agent-spec-v0.3.md`](./docs/asset-planning-agent-spec-v0.3.md)
+- **Tracked jobs:** [`docs/examples/asset-planning-v0.3-rag-jobs.json`](./docs/examples/asset-planning-v0.3-rag-jobs.json)
+- **Implementation:** [`asset-generation/`](./asset-generation/) - constrained Kolors generation, atomic local manifest, DPAPI launcher.
+- **Status:** v0.3-20260721 ready; RAG fixture has 4 jobs (3 ai_generate backgrounds + 1 code diagram); smoke test verified Kolors image generation.
 
 > **Layout note:** stage ⓪ (Fetch) lives in `00-fetch/`. Textize (上方服务) lives in `textize/` (no number - it's a service, not a flow stage). Stage ① (Collect) code lives at the repo root (`src/`, `src-tauri/`). When later stages arrive the tree will be reorganized into per-stage directories via `git mv`. **Versioning is Anthropic-style** (family / minor / date-stamp), see `docs/versioning.md`.
 

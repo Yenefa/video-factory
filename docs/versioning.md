@@ -97,6 +97,8 @@ research package（及任何层产出）**不独立版本号**，标注"按 Spec
 | ③ Script sample（RAG topic） | 按 Spec v2.0-20260721 实测样例 | 13 段 TTS 已生成；采用本地 1.2× 版本，口播时间线锁定为 65.866 秒（原速 78.178 秒） |
 | ④ Visual Language | v0.1-20260721 | 首版可复用视觉导演契约；明确视觉策略、运动概念、跨场视觉语法以及与 Asset Planning / Storyboard 的边界 |
 | ④ Visual Language sample（RAG topic） | 按 Spec v0.1-20260721 | Claude × Google 混合方向；5 个场景覆盖全部 13 段锁定旁白 |
+| ⑤ Asset Planning | v0.3-20260721 | 首版资产生成契约；受限 SiliconFlow Kolors 文生图（≤3 张/次、单图单请求、不重试、不 fallback、即时下载），DPAPI 凭证启动器，本地原子 manifest |
+| ⑤ Asset Planning sample（RAG topic） | 按 Spec v0.3-20260721 | 4 job（3 ai_generate 背景 + 1 code 图表）；smoke test 已验证 Kolors 生图 |
 
 ---
 
