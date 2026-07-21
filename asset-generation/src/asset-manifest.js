@@ -10,6 +10,7 @@ const SOURCE_METADATA_KEYS = [
   "unknown_reason",
 ];
 const TAINTED_FIELD = /^(?:authorization|headers?|provider_url|url|api[_-]?key|access[_-]?token|token|secret)$/i;
+const UNSAFE_PERSISTED_VALUE = /https?:\/\/\S+|\bbearer\s+[a-z0-9._~+/=-]+|\bsk-[a-z0-9_-]{8,}\b/i;
 const JOURNAL_NAME = ".asset-manifest-transaction.json";
 const LOCK_NAME = ".asset-manifest.lock";
 
@@ -142,6 +143,10 @@ const removeIfPresent = async (fileSystem, filePath) => {
 const removeAndConfirmAbsent = async (fileSystem, filePath) => {
   try {
     await fileSystem.rm(filePath, {force: true});
+  } catch {
+    // Verify the resulting filesystem state even when removal reports an error.
+  }
+  try {
     return !(await statIfPresent(fileSystem, filePath));
   } catch {
     return false;
@@ -158,10 +163,11 @@ const processIsAlive = (pid) => {
 };
 
 const acquireLock = async (fileSystem, lockPath) => {
-  const contents = `${JSON.stringify({pid: process.pid, nonce: randomUUID()})}\n`;
+  const ownerToken = randomUUID();
+  const contents = `${JSON.stringify({pid: process.pid, owner_token: ownerToken})}\n`;
   try {
     await fileSystem.writeFile(lockPath, contents, {encoding: "utf8", flag: "wx"});
-    return;
+    return ownerToken;
   } catch (error) {
     if (error?.code !== "EEXIST") throw error;
   }
@@ -177,12 +183,37 @@ const acquireLock = async (fileSystem, lockPath) => {
   if (Number.isInteger(existingLock?.pid) && processIsAlive(existingLock.pid)) {
     throw new Error("asset manifest persistence is already in progress");
   }
-  await removeIfPresent(fileSystem, lockPath);
+
+  const quarantinePath = `${lockPath}.stale.${randomUUID()}`;
+  let quarantined = false;
+  try {
+    await fileSystem.rename(lockPath, quarantinePath);
+    quarantined = true;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  if (quarantined && !(await removeAndConfirmAbsent(fileSystem, quarantinePath))) {
+    throw new Error("asset manifest stale lock cleanup failed");
+  }
+
   try {
     await fileSystem.writeFile(lockPath, contents, {encoding: "utf8", flag: "wx"});
+    return ownerToken;
   } catch (error) {
     if (error?.code === "EEXIST") throw new Error("asset manifest persistence is already in progress");
     throw error;
+  }
+};
+
+const releaseLock = async (fileSystem, lockPath, ownerToken) => {
+  try {
+    const stats = await assertNotSymlink(fileSystem, lockPath, "asset manifest lock");
+    if (!stats?.isFile()) return;
+    const lock = await readJson(fileSystem, lockPath, "asset manifest lock");
+    if (lock?.owner_token !== ownerToken) return;
+    await fileSystem.rm(lockPath, {force: true});
+  } catch {
+    // A future invocation can reclaim a lock left by this process.
   }
 };
 
@@ -205,10 +236,20 @@ const recoverTransaction = async ({fileSystem, outputDir, manifestPath, journalP
   const journal = validatedJournal(await readJson(fileSystem, journalPath, "asset transaction journal"));
   const manifest = await readManifest(fileSystem, manifestPath);
   const committed = manifest.some((record) => record?.asset_id === journal.asset_id);
-  if (!committed) await removeIfPresent(fileSystem, path.join(outputDir, ...journal.file.split("/")));
-  await removeIfPresent(fileSystem, path.join(outputDir, ...journal.image_temp.split("/")));
-  await removeIfPresent(fileSystem, path.join(outputDir, journal.manifest_temp));
-  await removeIfPresent(fileSystem, journalPath);
+  const requiredCleanupPaths = [
+    path.join(outputDir, ...journal.image_temp.split("/")),
+    path.join(outputDir, journal.manifest_temp),
+  ];
+  if (!committed) requiredCleanupPaths.unshift(path.join(outputDir, ...journal.file.split("/")));
+  const cleanupResults = await Promise.all(
+    requiredCleanupPaths.map((cleanupPath) => removeAndConfirmAbsent(fileSystem, cleanupPath)),
+  );
+  if (cleanupResults.some((removed) => !removed)) {
+    throw new Error("asset recovery incomplete; recovery journal retained");
+  }
+  if (!(await removeAndConfirmAbsent(fileSystem, journalPath))) {
+    throw new Error("asset recovery incomplete; recovery journal retained");
+  }
 };
 
 const buildRecord = ({episodeId, job, image, generation, width, height}) => {
@@ -250,15 +291,25 @@ const buildRecord = ({episodeId, job, image, generation, width, height}) => {
   };
 };
 
+const assertSafePersistedValues = (value) => {
+  if (typeof value === "string" && UNSAFE_PERSISTED_VALUE.test(value)) {
+    throw new Error("asset record contains an unsafe persisted value");
+  }
+  if (value === null || typeof value !== "object") return;
+  for (const child of Object.values(value)) assertSafePersistedValues(child);
+};
+
 export const persistGeneratedAsset = async (request, {fileSystem = nodeFileSystem} = {}) => {
   const validated = validateRequest(request);
+  const record = buildRecord(validated);
+  assertSafePersistedValues(record);
   const resolvedOutputDir = path.resolve(validated.outputDir);
   await fileSystem.mkdir(resolvedOutputDir, {recursive: true});
   const outputStats = await assertNotSymlink(fileSystem, resolvedOutputDir, "outputDir");
   if (!outputStats?.isDirectory()) throw new Error("outputDir must be a directory");
 
   const lockPath = path.join(resolvedOutputDir, LOCK_NAME);
-  await acquireLock(fileSystem, lockPath);
+  const lockOwnerToken = await acquireLock(fileSystem, lockPath);
   try {
     const assetsDir = path.join(resolvedOutputDir, "assets");
     const manifestPath = path.join(resolvedOutputDir, "asset-manifest.json");
@@ -268,7 +319,6 @@ export const persistGeneratedAsset = async (request, {fileSystem = nodeFileSyste
     const assetsStats = await assertNotSymlink(fileSystem, assetsDir, "assets directory");
     if (!assetsStats?.isDirectory()) throw new Error("assets path must be a directory");
 
-    const record = buildRecord(validated);
     const imagePath = path.join(resolvedOutputDir, ...record.file.split("/"));
     const manifest = await readManifest(fileSystem, manifestPath);
     if (manifest.some((existing) => existing?.asset_id === record.asset_id || existing?.id === record.id)) {
@@ -316,6 +366,6 @@ export const persistGeneratedAsset = async (request, {fileSystem = nodeFileSyste
       throw error;
     }
   } finally {
-    await removeIfPresent(fileSystem, lockPath);
+    await releaseLock(fileSystem, lockPath, lockOwnerToken);
   }
 };

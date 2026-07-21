@@ -192,6 +192,44 @@ test("rejects tainted fields and non-null generated provenance before writing", 
   }
 });
 
+test("rejects credentials and explicit URLs hidden in persisted field values", async () => {
+  const taintedValues = [
+    {job: {...baseJob, prompt: "Bearer top-secret-token"}},
+    {job: {...baseJob, name: "https://temporary.example/image.png"}},
+    {generation: {model: "sk-1234567890abcdef", seed: 1, traceId: "trace"}},
+    {generation: {model: "model", seed: 1, traceId: "https://temporary.example/trace"}},
+  ];
+
+  for (const request of taintedValues) {
+    const outputDir = path.join(await makeOutputDirectory(), "not-created");
+    await assert.rejects(
+      persistGeneratedAsset({
+        outputDir,
+        episodeId: "episode-1",
+        job: request.job ?? baseJob,
+        image: {bytes: Buffer.from([1]), contentType: "image/png"},
+        generation: request.generation ?? {model: "model", seed: 1, traceId: "trace"},
+      }),
+      (error) => {
+        assert.match(error.message, /unsafe persisted value/i);
+        assert.doesNotMatch(error.message, /top-secret|temporary\.example|sk-123/i);
+        return true;
+      },
+    );
+    await assert.rejects(readFile(path.join(outputDir, "asset-manifest.json")), /ENOENT/);
+  }
+
+  const safeOutputDir = await makeOutputDirectory();
+  const safeRecord = await persistGeneratedAsset({
+    outputDir: safeOutputDir,
+    episodeId: "episode-1",
+    job: {...baseJob, prompt: "Avoid https references in the composition"},
+    image: {bytes: Buffer.from([1]), contentType: "image/png"},
+    generation: {model: "model", seed: 1, traceId: "trace"},
+  });
+  assert.equal(safeRecord.prompt, "Avoid https references in the composition");
+});
+
 test("concurrent writes cannot overwrite the same asset ID", async () => {
   const outputDir = await makeOutputDirectory();
   const persist = (byte) => persistGeneratedAsset({
@@ -203,6 +241,61 @@ test("concurrent writes cannot overwrite the same asset ID", async () => {
   });
 
   const results = await Promise.allSettled([persist(1), persist(2)]);
+  assert.equal(results.filter(({status}) => status === "fulfilled").length, 1);
+  assert.equal(results.filter(({status}) => status === "rejected").length, 1);
+  assert.equal(JSON.parse(await readFile(path.join(outputDir, "asset-manifest.json"), "utf8")).length, 1);
+});
+
+test("two contenders cannot both reclaim the same stale lock", async () => {
+  const outputDir = await makeOutputDirectory();
+  const lockPath = path.join(outputDir, ".asset-manifest.lock");
+  await writeFile(lockPath, JSON.stringify({pid: 2147483647, nonce: "stale-owner"}));
+
+  let staleReads = 0;
+  let releaseReads;
+  const bothRead = new Promise((resolve) => { releaseReads = resolve; });
+  let releaseFirstRemover;
+  const secondOwnerInstalled = new Promise((resolve) => { releaseFirstRemover = resolve; });
+  const sharedReadFile = async (...args) => {
+    const result = await fs.readFile(...args);
+    if (path.resolve(args[0]) === path.resolve(lockPath)) {
+      staleReads += 1;
+      if (staleReads === 2) releaseReads();
+      await bothRead;
+    }
+    return result;
+  };
+  const firstFs = {
+    ...fs,
+    readFile: sharedReadFile,
+    rm: async (target, options) => {
+      if (path.resolve(target) === path.resolve(lockPath)) {
+        const currentLock = JSON.parse(await fs.readFile(target, "utf8"));
+        if (currentLock.nonce === "stale-owner") await secondOwnerInstalled;
+      }
+      return fs.rm(target, options);
+    },
+  };
+  const secondFs = {
+    ...fs,
+    readFile: sharedReadFile,
+    writeFile: async (target, data, options) => {
+      const result = await fs.writeFile(target, data, options);
+      if (path.resolve(target) === path.resolve(lockPath) && options?.flag === "wx") {
+        releaseFirstRemover();
+      }
+      return result;
+    },
+  };
+  const persist = (id, fileSystem) => persistGeneratedAsset({
+    outputDir,
+    episodeId: "episode-1",
+    job: {...baseJob, id},
+    image: {bytes: Buffer.from([1]), contentType: "image/png"},
+    generation: {model: "model", seed: 1, traceId: "trace"},
+  }, {fileSystem});
+
+  const results = await Promise.allSettled([persist("first", firstFs), persist("second", secondFs)]);
   assert.equal(results.filter(({status}) => status === "fulfilled").length, 1);
   assert.equal(results.filter(({status}) => status === "rejected").length, 1);
   assert.equal(JSON.parse(await readFile(path.join(outputDir, "asset-manifest.json"), "utf8")).length, 1);
@@ -306,6 +399,59 @@ test("next persistence recovers an orphan image from an interrupted transaction"
 
   await assert.rejects(readFile(path.join(outputDir, "assets", "orphan.png")), /ENOENT/);
   await assert.rejects(readFile(path.join(outputDir, ".asset-manifest-transaction.json")), /ENOENT/);
+});
+
+test("recovery retains its journal when orphan deletion fails and succeeds next time", async () => {
+  const outputDir = await makeOutputDirectory();
+  const orphanPath = path.join(outputDir, "assets", "orphan.png");
+  const journalPath = path.join(outputDir, ".asset-manifest-transaction.json");
+  await mkdir(path.dirname(orphanPath));
+  await writeFile(orphanPath, Buffer.from([9]));
+  await writeFile(journalPath, JSON.stringify({
+    version: 1,
+    asset_id: "orphan",
+    file: "assets/orphan.png",
+    image_temp: "assets/.orphan.interrupted.tmp",
+    manifest_temp: ".asset-manifest.interrupted.tmp",
+  }));
+  let failedOnce = false;
+  const failingFs = {
+    ...fs,
+    rm: async (target, options) => {
+      if (!failedOnce && path.resolve(target) === path.resolve(orphanPath)) {
+        failedOnce = true;
+        throw new Error("injected sensitive recovery failure");
+      }
+      return fs.rm(target, options);
+    },
+  };
+
+  await assert.rejects(
+    persistGeneratedAsset({
+      outputDir,
+      episodeId: "episode-1",
+      job: baseJob,
+      image: {bytes: Buffer.from([1]), contentType: "image/png"},
+      generation: {model: "model", seed: 1, traceId: "trace"},
+    }, {fileSystem: failingFs}),
+    (error) => {
+      assert.match(error.message, /recovery incomplete.*journal retained/i);
+      assert.doesNotMatch(error.message, /sensitive|injected/i);
+      return true;
+    },
+  );
+  assert.deepEqual(await readFile(orphanPath), Buffer.from([9]));
+  await readFile(journalPath, "utf8");
+
+  await persistGeneratedAsset({
+    outputDir,
+    episodeId: "episode-1",
+    job: baseJob,
+    image: {bytes: Buffer.from([1]), contentType: "image/png"},
+    generation: {model: "model", seed: 1, traceId: "trace"},
+  });
+  await assert.rejects(readFile(orphanPath), /ENOENT/);
+  await assert.rejects(readFile(journalPath), /ENOENT/);
 });
 
 test("next persistence retains an asset already committed in the manifest", async () => {
