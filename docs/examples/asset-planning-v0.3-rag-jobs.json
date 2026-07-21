@@ -1,174 +1,70 @@
 {
-  "contract_version": "asset-planning-v0.3",
-  "episode": "rag-context-selection",
-  "stage": "asset_planning",
-  "stage_boundary": {
-    "upstream": "visual_language",
-    "downstream": "storyboard"
-  },
-  "automation_policy": {
-    "generated_image_limit_per_run": 3,
+  "episode_id": "rag-context-selection",
+  "policy": {
+    "max_generated_assets": 3,
     "batch_size": 1,
-    "attempts_per_job": 1,
-    "automatic_retry": false,
-    "provider_fallback": false,
-    "download_immediately": true,
-    "credential_storage": "DPAPI outside repository",
-    "persist_provider_url": false
+    "max_attempts_per_asset": 1,
+    "retry_on_failure": false
   },
   "jobs": [
     {
-      "job_id": "asset-scene-01-context-desk-atmosphere",
+      "id": "asset-scene-01-context-desk-atmosphere",
       "scene_id": "scene-01",
-      "stage": "asset_planning",
-      "stage_boundary": {
-        "upstream": "visual_language",
-        "downstream": "storyboard"
-      },
-      "route": "ai_generate",
-      "asset_type": "background_image",
-      "purpose": "A symbolic vertical background plate for the expandable context-desk metaphor.",
-      "reusable": false,
+      "source": "ai_generate",
+      "classification": "emotional",
+      "name": "Context desk atmosphere background",
       "prompt": "Vertical editorial illustration of a dark abstract research desk extending into a quiet grid, a few blank paper cards and a soft teal search beam, no logos, no readable text, no interface, no people, cinematic but restrained, generous center-safe negative space.",
-      "output": {
-        "width": 720,
-        "height": 1280,
-        "format": "png",
-        "alpha": false
-      },
-      "generation_policy": {
-        "batch_size": 1,
-        "attempts": 1,
-        "automatic_retry": false,
-        "provider_fallback": false,
-        "download_immediately": true
-      },
-      "source": {
-        "kind": "generated",
-        "reference": "generator-output:asset-scene-01-context-desk-atmosphere",
-        "license": "unknown"
-      },
+      "negative_prompt": "letters, numbers, watermark, logo, brand mark, UI screenshot, robot, brain, chip",
+      "image_size": "720x1280",
+      "reusable": false,
       "source_metadata": {
         "creator_or_publisher": null,
         "attribution": null,
         "ancestor_asset_id": null,
         "unknown_reason": null
-      },
-      "cost_status": "unknown",
-      "handoff": "Background plate only; Storyboard determines crop and timing."
+      }
     },
     {
-      "job_id": "asset-scene-02-document-flood-atmosphere",
+      "id": "asset-scene-02-document-flood-atmosphere",
       "scene_id": "scene-02",
-      "stage": "asset_planning",
-      "stage_boundary": {
-        "upstream": "visual_language",
-        "downstream": "storyboard"
-      },
-      "route": "ai_generate",
-      "asset_type": "background_image",
-      "purpose": "A symbolic vertical atmosphere plate for document overload, without representing real records.",
-      "reusable": false,
+      "source": "ai_generate",
+      "classification": "emotional",
+      "name": "Document flood atmosphere background",
       "prompt": "Vertical conceptual illustration of abstract blank document shapes flowing into layered stacks above a dark desk, subtle amber glow and translucent boundary lines, no readable text, no company names, no charts, no product screens, no people, calm research-editorial style with central negative space.",
-      "output": {
-        "width": 720,
-        "height": 1280,
-        "format": "png",
-        "alpha": false
-      },
-      "generation_policy": {
-        "batch_size": 1,
-        "attempts": 1,
-        "automatic_retry": false,
-        "provider_fallback": false,
-        "download_immediately": true
-      },
-      "source": {
-        "kind": "generated",
-        "reference": "generator-output:asset-scene-02-document-flood-atmosphere",
-        "license": "unknown"
-      },
-      "source_metadata": {
-        "creator_or_publisher": null,
-        "attribution": null,
-        "ancestor_asset_id": null,
-        "unknown_reason": null
-      },
-      "cost_status": "unknown",
-      "handoff": "Atmosphere plate only; deterministic overlay elements remain separate assets."
-    },
-    {
-      "job_id": "asset-scene-05-selection-gate-atmosphere",
-      "scene_id": "scene-05",
-      "stage": "asset_planning",
-      "stage_boundary": {
-        "upstream": "visual_language",
-        "downstream": "storyboard"
-      },
-      "route": "ai_generate",
-      "asset_type": "background_image",
-      "purpose": "A symbolic closing plate for selective entry into a shared workspace.",
+      "negative_prompt": "letters, numbers, watermark, logo, brand mark, UI screenshot, robot, brain, chip",
+      "image_size": "720x1280",
       "reusable": false,
-      "prompt": "Vertical minimal conceptual illustration of three blank glowing cards passing through an abstract teal gate onto a spacious dark desk, distant unselected cards softly receding, no words, no logos, no factual labels, no interface, no people, elegant editorial lighting and protected center-safe space.",
-      "output": {
-        "width": 720,
-        "height": 1280,
-        "format": "png",
-        "alpha": false
-      },
-      "generation_policy": {
-        "batch_size": 1,
-        "attempts": 1,
-        "automatic_retry": false,
-        "provider_fallback": false,
-        "download_immediately": true
-      },
-      "source": {
-        "kind": "generated",
-        "reference": "generator-output:asset-scene-05-selection-gate-atmosphere",
-        "license": "unknown"
-      },
       "source_metadata": {
         "creator_or_publisher": null,
         "attribution": null,
         "ancestor_asset_id": null,
         "unknown_reason": null
-      },
-      "cost_status": "unknown",
-      "handoff": "Closing plate only; Storyboard determines the final hold."
+      }
     },
     {
-      "job_id": "asset-context-overload-diagram",
-      "scene_id": "scene-03",
-      "stage": "asset_planning",
-      "stage_boundary": {
-        "upstream": "visual_language",
-        "downstream": "storyboard"
-      },
-      "route": "code",
-      "asset_type": "diagram_component",
-      "purpose": "Reusable ContextOverloadDiagram that contrasts a fixed pipeline with a question-centered selection network.",
-      "reusable": true,
-      "implementation_target": "src/components/ContextOverloadDiagram.tsx",
-      "output": {
-        "width": 720,
-        "height": 1280,
-        "format": "react_component",
-        "alpha": true
-      },
-      "source": {
-        "kind": "internal",
-        "reference": "component:ContextOverloadDiagram",
-        "license": "owned"
-      },
+      "id": "asset-scene-05-selection-gate-atmosphere",
+      "scene_id": "scene-05",
+      "source": "ai_generate",
+      "classification": "emotional",
+      "name": "Selection gate atmosphere background",
+      "prompt": "Vertical minimal conceptual illustration of three blank glowing cards passing through an abstract teal gate onto a spacious dark desk, distant unselected cards softly receding, no words, no logos, no factual labels, no interface, no people, elegant editorial lighting and protected center-safe space.",
+      "negative_prompt": "letters, numbers, watermark, logo, brand mark, UI screenshot, robot, brain, chip",
+      "image_size": "720x1280",
+      "reusable": false,
       "source_metadata": {
         "creator_or_publisher": null,
         "attribution": null,
         "ancestor_asset_id": null,
         "unknown_reason": null
-      },
-      "cost_status": "unknown",
-      "handoff": "Reusable diagram component; Storyboard supplies state changes and timing."
+      }
+    },
+    {
+      "id": "asset-context-overload-diagram",
+      "scene_id": "scene-03",
+      "source": "code",
+      "classification": "information",
+      "name": "Context overload diagram component",
+      "reusable": true
     }
   ]
 }
