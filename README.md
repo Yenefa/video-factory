@@ -9,7 +9,7 @@ An AI video-production pipeline. Each stage is a self-contained tool; together t
 | ⓪ | **Fetch** | Actively harvest materials from the web (docs, papers, Reddit, blogs) | ✅ v1.0-20260720 |
 | ① | **Collect (Raw)** | Gather all raw materials (container, also receives manual drops) | ✅ v1.0-20260720 |
 | ② | **Research** | Distill credible knowledge | ✅ v1.0-20260720 (RAG topic, 48 sources -> research package) |
-| ③ | **Script** | Turn knowledge into a narration script | ✅ v2.0-20260721 spec + RAG draft + live-verified TTS/Timing (13 segments, 65.866 s at 1.2×) |
+| ③ | **Script** | Turn knowledge into a narration script | ✅ v3.0-20260722 spec (Director, 7-step) + v2.0 RAG draft + live-verified TTS/Timing (13 segments, 65.866 s at 1.2×) |
 | ④ | **Visual Language** | Translate each abstract line into an executable visual expression system | ✅ v0.1-20260721 spec + tracked RAG Visual Plan |
 | ⑤ | **Asset Planning** | List every asset this episode needs (SVG, icons, logos, illustrations, AI images) | ✅ v0.3-20260721 spec + constrained SiliconFlow Kolors generation + DPAPI launcher + RAG test-job fixture |
 | ⑥ | **Storyboard** | Shot order, duration, transitions, pacing | 🔲 planned |
