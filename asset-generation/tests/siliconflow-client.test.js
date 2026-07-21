@@ -27,6 +27,7 @@ test("preflight accepts the configured model from data with one authenticated GE
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], `${SILICONFLOW_BASE_URL}/models?type=image&sub_type=text-to-image`);
   assert.equal(calls[0][1].method, "GET");
+  assert.equal(calls[0][1].redirect, "error");
   assert.deepEqual(calls[0][1].headers, {Authorization: "Bearer secret"});
 });
 
@@ -79,6 +80,24 @@ test("preflight HTTP and network errors are safe and never retried", async (t) =
   }
 });
 
+test("preflight reports successful malformed provider responses safely", async (t) => {
+  for (const scenario of [
+    {name: "missing JSON content type", response: new Response("{}", {status: 200})},
+    {name: "wrong content type", response: new Response("{}", {status: 200, headers: {"content-type": "text/plain"}})},
+    {name: "malformed JSON", response: new Response("private response body", {status: 200, headers: {"content-type": "application/json"}})},
+    {name: "invalid schema", response: jsonResponse({unexpected: []})},
+  ]) {
+    await t.test(scenario.name, async () => {
+      await assert.rejects(
+        () => assertKolorsAvailable({apiKey: "secret-never-log", fetchImpl: async () => scenario.response}),
+        (error) => error.message === "model preflight returned a malformed response"
+          && !error.message.includes("secret-never-log")
+          && !error.message.includes("private response body"),
+      );
+    });
+  }
+});
+
 test("generation uses one Kolors image with the approved request body", async () => {
   const calls = [];
   const fetchImpl = async (...args) => {
@@ -98,6 +117,7 @@ test("generation uses one Kolors image with the approved request body", async ()
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], `${SILICONFLOW_BASE_URL}/images/generations`);
   assert.equal(calls[0][1].method, "POST");
+  assert.equal(calls[0][1].redirect, "error");
   assert.deepEqual(calls[0][1].headers, {
     Authorization: "Bearer secret",
     "Content-Type": "application/json",
@@ -183,6 +203,60 @@ test("generation network errors are safe and never retried", async () => {
   assert.equal(attempts, 1);
 });
 
+test("generation reports successful malformed provider responses safely", async (t) => {
+  for (const scenario of [
+    {name: "wrong content type", response: new Response("{}", {status: 200, headers: {"content-type": "text/plain"}})},
+    {name: "malformed JSON", response: new Response("private response body", {status: 200, headers: {"content-type": "application/json"}})},
+    {name: "invalid schema", response: jsonResponse({images: []})},
+  ]) {
+    await t.test(scenario.name, async () => {
+      await assert.rejects(
+        () => createKolorsImage({
+          apiKey: "secret-never-log",
+          job: {prompt: "p", negative_prompt: "n", image_size: "720x1280"},
+          fetchImpl: async () => scenario.response,
+        }),
+        (error) => error.message === "image generation returned a malformed response"
+          && !error.message.includes("secret-never-log")
+          && !error.message.includes("private response body"),
+      );
+    });
+  }
+});
+
+const forbiddenImageUrls = [
+  "http://public.example/image.png",
+  "https://user:password@public.example/image.png",
+  "https://localhost/image.png",
+  "https://preview.localhost/image.png",
+  "https://127.0.0.1/image.png",
+  "https://10.0.0.1/image.png",
+  "https://172.16.0.1/image.png",
+  "https://192.168.0.1/image.png",
+  "https://169.254.1.1/image.png",
+  "https://[::1]/image.png",
+  "https://[fc00::1]/image.png",
+  "https://[fd00::1]/image.png",
+  "https://[fe80::1]/image.png",
+  "https://[::ffff:127.0.0.1]/image.png",
+];
+
+test("generation rejects unsafe returned image URLs without exposing them", async (t) => {
+  for (const url of ["not a URL", ...forbiddenImageUrls]) {
+    await t.test(url, async () => {
+      await assert.rejects(
+        () => createKolorsImage({
+          apiKey: "secret",
+          job: {prompt: "p", negative_prompt: "n", image_size: "720x1280"},
+          fetchImpl: async () => jsonResponse({images: [{url}]}),
+        }),
+        (error) => error.message === "image generation returned an unsafe image URL"
+          && !error.message.includes(url),
+      );
+    });
+  }
+});
+
 test("download returns buffered bytes and content type without Authorization", async () => {
   const calls = [];
   const fetchImpl = async (...args) => {
@@ -197,6 +271,7 @@ test("download returns buffered bytes and content type without Authorization", a
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], "https://temporary.example/image.png");
+  assert.equal(calls[0][1].redirect, "error");
   assert.equal(calls[0][1]?.headers?.Authorization, undefined);
   assert.ok(Buffer.isBuffer(result.bytes));
   assert.deepEqual([...result.bytes], [1, 2, 3]);
@@ -232,4 +307,81 @@ test("download errors hide the temporary URL and response body and are not retri
       assert.equal(attempts, 1);
     });
   }
+});
+
+test("download rejects unsafe URLs before making a request", async (t) => {
+  for (const url of ["not a URL", ...forbiddenImageUrls]) {
+    await t.test(url, async () => {
+      let attempts = 0;
+      await assert.rejects(
+        () => downloadImage({url, fetchImpl: async () => {
+          attempts += 1;
+          return new Response(new Uint8Array([1]), {headers: {"content-type": "image/png"}});
+        }}),
+        (error) => error.message === "image download URL is not allowed"
+          && !error.message.includes(url),
+      );
+      assert.equal(attempts, 0);
+    });
+  }
+});
+
+test("download requires an image content type", async (t) => {
+  for (const headers of [{}, {"content-type": "text/plain"}]) {
+    await t.test(headers["content-type"] ?? "missing", async () => {
+      await assert.rejects(
+        () => downloadImage({
+          url: "https://temporary.example/image.png",
+          fetchImpl: async () => new Response(new Uint8Array([1]), {headers}),
+        }),
+        (error) => error.message === "image download returned an unsupported content type",
+      );
+    });
+  }
+});
+
+test("download rejects a declared body larger than 20 MiB without reading it", async () => {
+  let readStarted = false;
+  const response = {
+    ok: true,
+    status: 200,
+    headers: new Headers({
+      "content-type": "image/png",
+      "content-length": "20971521",
+    }),
+    body: {getReader() { readStarted = true; }},
+  };
+
+  await assert.rejects(
+    () => downloadImage({
+      url: "https://temporary.example/image.png",
+      fetchImpl: async () => response,
+    }),
+    (error) => error.message === "image download exceeded the 20 MiB limit",
+  );
+  assert.equal(readStarted, false);
+});
+
+test("download cancels a streamed body when it exceeds 20 MiB", async () => {
+  const chunk = new Uint8Array(10 * 1024 * 1024);
+  let pulls = 0;
+  let cancelled = false;
+  const body = new ReadableStream({
+    pull(controller) {
+      pulls += 1;
+      controller.enqueue(pulls <= 2 ? chunk : new Uint8Array([1]));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+
+  await assert.rejects(
+    () => downloadImage({
+      url: "https://temporary.example/image.png",
+      fetchImpl: async () => new Response(body, {headers: {"content-type": "image/png"}}),
+    }),
+    (error) => error.message === "image download exceeded the 20 MiB limit",
+  );
+  assert.equal(cancelled, true);
 });
