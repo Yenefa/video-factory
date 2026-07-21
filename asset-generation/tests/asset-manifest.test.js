@@ -234,6 +234,56 @@ test("rolls back the image and journal when the manifest rename fails", async ()
   await assert.rejects(readFile(path.join(outputDir, ".asset-manifest-transaction.json")), /ENOENT/);
 });
 
+test("retains the journal when image rollback fails so the next invocation recovers", async () => {
+  const outputDir = await makeOutputDirectory();
+  let imageCleanupFailed = false;
+  const failingFs = {
+    ...fs,
+    rename: async (source, destination) => {
+      if (path.basename(destination) === "asset-manifest.json") {
+        throw new Error("injected manifest rename failure");
+      }
+      return fs.rename(source, destination);
+    },
+    rm: async (target, options) => {
+      if (!imageCleanupFailed && path.basename(target) === "hook.png") {
+        imageCleanupFailed = true;
+        throw new Error("injected sensitive cleanup failure");
+      }
+      return fs.rm(target, options);
+    },
+  };
+
+  await assert.rejects(
+    persistGeneratedAsset({
+      outputDir,
+      episodeId: "episode-1",
+      job: baseJob,
+      image: {bytes: Buffer.from([9]), contentType: "image/png"},
+      generation: {model: "model", seed: 1, traceId: "trace"},
+    }, {fileSystem: failingFs}),
+    (error) => {
+      assert.match(error.message, /rollback incomplete.*journal retained/i);
+      assert.doesNotMatch(error.message, /sensitive|injected/i);
+      return true;
+    },
+  );
+  assert.deepEqual(await readFile(path.join(outputDir, "assets", "hook.png")), Buffer.from([9]));
+  await readFile(path.join(outputDir, ".asset-manifest-transaction.json"), "utf8");
+
+  await persistGeneratedAsset({
+    outputDir,
+    episodeId: "episode-1",
+    job: {...baseJob, id: "second"},
+    image: {bytes: Buffer.from([2]), contentType: "image/png"},
+    generation: {model: "model", seed: 2, traceId: "trace-2"},
+  });
+
+  await assert.rejects(readFile(path.join(outputDir, "assets", "hook.png")), /ENOENT/);
+  assert.deepEqual(await readFile(path.join(outputDir, "assets", "second.png")), Buffer.from([2]));
+  await assert.rejects(readFile(path.join(outputDir, ".asset-manifest-transaction.json")), /ENOENT/);
+});
+
 test("next persistence recovers an orphan image from an interrupted transaction", async () => {
   const outputDir = await makeOutputDirectory();
   await mkdir(path.join(outputDir, "assets"));

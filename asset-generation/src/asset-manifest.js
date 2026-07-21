@@ -139,6 +139,15 @@ const removeIfPresent = async (fileSystem, filePath) => {
   }
 };
 
+const removeAndConfirmAbsent = async (fileSystem, filePath) => {
+  try {
+    await fileSystem.rm(filePath, {force: true});
+    return !(await statIfPresent(fileSystem, filePath));
+  } catch {
+    return false;
+  }
+};
+
 const processIsAlive = (pid) => {
   try {
     process.kill(pid, 0);
@@ -300,8 +309,10 @@ export const persistGeneratedAsset = async (request, {fileSystem = nodeFileSyste
       await removeIfPresent(fileSystem, imageTempPath);
       await removeIfPresent(fileSystem, manifestTempPath);
       await removeIfPresent(fileSystem, journalTempPath);
+      if (imageInstalled && !(await removeAndConfirmAbsent(fileSystem, imagePath))) {
+        throw new Error("asset rollback incomplete; recovery journal retained");
+      }
       await removeIfPresent(fileSystem, journalPath);
-      if (imageInstalled) await removeIfPresent(fileSystem, imagePath);
       throw error;
     }
   } finally {
