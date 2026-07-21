@@ -34,3 +34,16 @@ The remote response URL is **transient** and is never persisted. `asset-manifest
 ## Credentials
 
 The API key never appears in source control, logs, or the manifest. `run-live.ps1` sets `SILICONFLOW_API_KEY` in the environment only long enough to invoke the CLI, redacts `sk-...` patterns in output, and clears the variable in a `finally` block. Use `-ResetCredential` to replace a stored key.
+
+## Image Model & Prompt Reference
+
+**Current model:** SiliconFlow `Kwai-Kolors/Kolors` (text-to-image). Configured in `src/siliconflow-client.js` (`KOLORS_MODEL`, `SILICONFLOW_BASE_URL`).
+
+**Prompt reference:** [awesome-nano-banana-pro-prompts](https://github.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts) — 通用生图提示词技巧集（结构化描述、风格关键词、构图、negative prompt 等原则跨模型通用）。当前仅作参考，未集成进代码；⑤ 的 job fixture prompt 为手写，可参考此 skill 优化。
+
+**替换说明（以后随时换模型）：** 提示词技巧通用，但同一 prompt 在不同模型上出图效果有差异（训练数据、敏感词过滤、prompt 格式偏好）。如换模型（如 Gemini nano-banana）：
+
+1. 提示词原则可复用，但需按新模型微调 prompt；
+2. 更新 `src/siliconflow-client.js` 的 model ID / endpoint / 请求参数；
+3. 更新 `run-live.ps1` 的环境变量名与 DPAPI 凭证路径；
+4. 重跑 `npm test` 确认 client 测试通过。
