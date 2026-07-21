@@ -88,6 +88,8 @@ Every planned or completed asset manifest record must include:
 
 `cost_status` must remain `"unknown"` unless verified by a separately approved accounting record; never label a route or provider as free. `provider_url` is always `null` in persisted artifacts. `source.reference` must be a stable non-secret identifier, never a provider or download URL.
 
+`route` and `source` have distinct canonical meanings in a persisted manifest: `route` is the selection route string, while `source` is always the provenance object shown above. The compact automatic-generation job input keeps its route in the string field `source`; persistence maps `source: "ai_generate"` to manifest `route: "ai_generate"` and constructs the manifest `source` object as `kind: "generated"`, `reference: "generator-output:<asset-id>"`, `license: "unknown"`, plus the four `source_metadata` values. The generated-asset persistence record also retains `id` as its execution-job identifier alias while `asset_id` remains the canonical manifest identifier.
+
 Route-specific source requirements:
 
 - `capture_external` must persist `source.creator_or_publisher` and `source.attribution`. Either value may be `unknown` only when `source.unknown_reason` explains why it could not be established. Preserve the source reference and applicable license in all cases.
@@ -107,6 +109,8 @@ Each job must include these fields:
 - `handoff` describing the non-timed dependency supplied to Storyboard
 
 `source_metadata` is the job-level route-conditional provenance payload. When a job becomes an asset manifest record, map each `source_metadata` key to the identically named field in `source`. For `ai_generate` and `code`, all four `source_metadata` values must be `null`. The route-specific source requirements above apply to `source_metadata` at planning time and to `source` after persistence.
+
+Generated image and manifest replacement uses a local transaction journal written before either final rename. If the second rename fails during an ordinary invocation, persistence removes the newly installed image and journal before returning the error. If the process stops between renames, the next persistence invocation recovers the journal under the manifest lock: it removes an orphan image when the manifest lacks the asset record, or retains the image when the manifest already contains the asset record, then removes transaction temporary files and the journal.
 
 `ai_generate` jobs additionally include a narrative-safe `prompt` and the fixed automatic-generation policy. Prompts should describe atmosphere, composition, and non-factual symbolic content; they must not state factual assertions.
 
