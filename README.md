@@ -9,8 +9,8 @@ An AI video-production pipeline. Each stage is a self-contained tool; together t
 | ⓪ | **Fetch** | Actively harvest materials from the web (docs, papers, Reddit, blogs) | ✅ v1.0-20260720 |
 | ① | **Collect (Raw)** | Gather all raw materials (container, also receives manual drops) | ✅ v1.0-20260720 |
 | ② | **Research** | Distill credible knowledge | ✅ v1.0-20260720 (RAG topic, 48 sources -> research package) |
-| ③ | **Script** | Turn knowledge into a narration script | 🔲 planned |
-| ④ | **Visual Language** | Translate each abstract line into a visual expression (metaphor, diagram, flow, icon) | 🔲 planned |
+| ③ | **Script** | Turn knowledge into a narration script | ✅ v2.0-20260721 spec + RAG draft + live-verified TTS/Timing (13 segments, 65.866 s at 1.2×) |
+| ④ | **Visual Language** | Translate each abstract line into an executable visual expression system | ✅ v0.1-20260721 spec + tracked RAG Visual Plan |
 | ⑤ | **Asset Planning** | List every asset this episode needs (SVG, icons, logos, illustrations, AI images) | 🔲 planned |
 | ⑥ | **Storyboard** | Shot order, duration, transitions, pacing | 🔲 planned |
 | ⑦ | **HyperFrames** | Auto-generate the HTML / CSS / GSAP animation engineering | 🔲 planned |
@@ -37,6 +37,31 @@ Textize 是上方基础设施服务，作用点在 ① Raw 和 ② Research 之�
 
 - **Spec:** [`textize/README.md`](./textize/README.md)
 - **Status:** v1.0-20260720 spec only. Scripts planned for v1.5. Interim: reuse `00-fetch/scripts/extract_pdf_text.py` for born-digital PDF pypdf extraction.
+
+## TTS / Timing（横切服务，不占层号）
+
+Script v2.0 不再手写精确时间码。③ Script 完稿并锁定后，TTS/Timing 按语义节拍生成语音、测量每段真实时长，并输出 narration timeline；⑥ Storyboard 再加入视觉停留、转场和静默，锁定最终视频时长。
+
+```text
+③ Script -> Script Lock -> semantic segments
+                             ├── TTS / Timing -> measured narration timeline ─┐
+                             └── ④ Visual -> ⑤ Assets ───────────────────────┤
+                                                                            ↓
+                                                                      ⑥ Storyboard
+```
+
+- **Spec:** [`docs/script-agent-spec-v2.0.md`](./docs/script-agent-spec-v2.0.md)
+- **Tracked example:** [`docs/examples/script-agent-v2-rag-draft.md`](./docs/examples/script-agent-v2-rag-draft.md)
+- **Implementation:** [`tts-timing/`](./tts-timing/) — MiniMax `speech-2.6-turbo`, `Podcast_girl`, semantic-segment MP3 generation and measured `timeline.json`.
+- **Status:** Live generation verified on 2026-07-21: 13 `Podcast_girl` MP3 segments; raw narration 78.178 seconds, locally retimed with pitch-preserving `atempo=1.2` to a measured 65.866 seconds.
+
+## Visual Language（④）
+
+Visual Language 把 Script 的抽象概念、技术关系、情绪和叙事目的转换为可执行的视觉表达，但不制作素材、不锁定最终镜头时间，也不渲染视频。
+
+- **Spec:** [`docs/visual-language-agent-spec-v0.1.md`](./docs/visual-language-agent-spec-v0.1.md)
+- **Tracked example:** [`docs/examples/visual-language-v0.1-rag-plan.md`](./docs/examples/visual-language-v0.1-rag-plan.md)
+- **Status:** v0.1-20260721 ready; RAG episode covers 5 scenes and all 13 locked narration segments with one coherent table/document/selection visual grammar.
 
 > **Layout note:** stage ⓪ (Fetch) lives in `00-fetch/`. Textize (上方服务) lives in `textize/` (no number - it's a service, not a flow stage). Stage ① (Collect) code lives at the repo root (`src/`, `src-tauri/`). When later stages arrive the tree will be reorganized into per-stage directories via `git mv`. **Versioning is Anthropic-style** (family / minor / date-stamp), see `docs/versioning.md`.
 
@@ -119,6 +144,7 @@ npm run tauri:build  # produces an installer under src-tauri/target/release/bund
 ```
 ├── 00-fetch/              ← stage ⓪ (Fetch workflow)
 ├── textize/               ← 上方服务（Textize spec，scripts TBD）- 无编号
+├── tts-timing/            ← 横切服务（semantic segments -> MP3 + measured timeline）
 ├── package.json           ← stage ① (Collect app)
 ├── vite.config.ts
 ├── tailwind.config.ts
@@ -144,8 +170,12 @@ npm run tauri:build  # produces an installer under src-tauri/target/release/bund
     ├── PLANNING.md        ← full project planning (2026-07-20 snapshot)
     ├── versioning.md      ← Anthropic-style versioning policy
     ├── research-agent-spec-v1.0.md   ← stage ② spec
+    ├── script-agent-spec-v1.0.md     ← stage ③ historical long-form spec
+    ├── script-agent-spec-v2.0.md     ← stage ③ current short-form + timing contract
+    ├── examples\                     ← tracked pipeline examples
     └── superpowers\
-        └── specs\
+        ├── specs\
+        └── plans\
 ```
 
 ### Architecture notes

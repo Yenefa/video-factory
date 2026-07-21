@@ -1,0 +1,19 @@
+{
+  "name": "video-factory-tts-timing",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "validate": "node src/cli.js validate",
+    "synthesize": "node src/cli.js synthesize",
+    "retime": "node src/cli.js retime"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/win32-x64": "^4.1.0",
+    "@ffprobe-installer/win32-x64": "^5.1.0"
+  }
+}
