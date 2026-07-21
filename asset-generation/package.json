@@ -1,0 +1,12 @@
+{
+  "name": "video-factory-asset-generation",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "validate": "node src/cli.js validate",
+    "generate": "node src/cli.js generate"
+  },
+  "engines": {"node": ">=18"}
+}
