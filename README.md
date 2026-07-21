@@ -40,7 +40,7 @@ Textize 是上方基础设施服务，作用点在 ① Raw 和 ② Research 之�
 
 ## TTS / Timing（横切服务，不占层号）
 
-Script v2.0 不再手写精确时间码。③ Script 完稿并锁定后，TTS/Timing 按语义节拍生成语音、测量每段真实时长，并输出 narration timeline；⑥ Storyboard 再加入视觉停留、转场和静默，锁定最终视频时长。
+③ Script v3.0 输出 Narration Timeline（含 `estimated_duration` 粗估）。TTS/Timing 按语义节拍生成语音、用 API 实测每段真实时长覆盖粗估，输出 measured narration timeline；⑥ Storyboard 再加入视觉停留、转场和静默，锁定最终视频时长。
 
 ```text
 ③ Script -> Script Lock -> semantic segments
@@ -50,7 +50,8 @@ Script v2.0 不再手写精确时间码。③ Script 完稿并锁定后，TTS/Ti
                                                                       ⑥ Storyboard
 ```
 
-- **Spec:** [`docs/script-agent-spec-v2.0.md`](./docs/script-agent-spec-v2.0.md)
+- **Spec:** [`docs/tts-agent-spec-v1.0.md`](./docs/tts-agent-spec-v1.0.md)
+- **Upstream:** [`docs/script-agent-spec-v3.0.md`](./docs/script-agent-spec-v3.0.md)（③ Script）
 - **Tracked example:** [`docs/examples/script-agent-v2-rag-draft.md`](./docs/examples/script-agent-v2-rag-draft.md)
 - **Implementation:** [`tts-timing/`](./tts-timing/) — MiniMax `speech-2.6-turbo`, `Podcast_girl`, semantic-segment MP3 generation and measured `timeline.json`.
 - **Status:** Live generation verified on 2026-07-21: 13 `Podcast_girl` MP3 segments; raw narration 78.178 seconds, locally retimed with pitch-preserving `atempo=1.2` to a measured 65.866 seconds.
