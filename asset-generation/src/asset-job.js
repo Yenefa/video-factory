@@ -1,10 +1,19 @@
+const ALLOWED_IMAGE_SIZES = Object.freeze(["1024x1024", "960x1280", "768x1024", "720x1440", "720x1280"]);
+const ALLOWED_IMAGE_SIZE_SET = new Set(ALLOWED_IMAGE_SIZES);
+const ALLOWED_POLICY_KEYS = new Set([
+  "max_generated_assets",
+  "batch_size",
+  "max_attempts_per_asset",
+  "retry_on_failure",
+]);
+
 export const TEST_GENERATION_POLICY = Object.freeze({
   model: "Kwai-Kolors/Kolors",
   maxGeneratedAssets: 3,
   batchSize: 1,
   maxAttemptsPerAsset: 1,
   retryOnFailure: false,
-  allowedImageSizes: ["1024x1024", "960x1280", "768x1024", "720x1440", "720x1280"],
+  allowedImageSizes: ALLOWED_IMAGE_SIZES,
 });
 
 const VALID_SOURCES = new Set(["library", "modify", "code", "capture", "external", "ai_generate"]);
@@ -20,9 +29,13 @@ const normalizePolicy = (suppliedPolicy) => {
   if (suppliedPolicy === null || typeof suppliedPolicy !== "object" || Array.isArray(suppliedPolicy)) {
     throw new Error("policy must be an object");
   }
+  for (const key of Object.keys(suppliedPolicy)) {
+    if (!ALLOWED_POLICY_KEYS.has(key)) throw new Error(`policy contains unsupported key: ${key}`);
+  }
 
   const policy = {
     ...TEST_GENERATION_POLICY,
+    allowedImageSizes: [...ALLOWED_IMAGE_SIZES],
     maxGeneratedAssets: suppliedPolicy.max_generated_assets ?? TEST_GENERATION_POLICY.maxGeneratedAssets,
     batchSize: suppliedPolicy.batch_size ?? TEST_GENERATION_POLICY.batchSize,
     maxAttemptsPerAsset: suppliedPolicy.max_attempts_per_asset ?? TEST_GENERATION_POLICY.maxAttemptsPerAsset,
@@ -59,12 +72,21 @@ const validateJob = (job, index, jobIds) => {
   if (!VALID_SOURCES.has(source)) throw new Error(`jobs[${index}].source is not supported`);
 
   if (source === "ai_generate") {
-    requiredString(job.prompt, `jobs[${index}].prompt`);
-    requiredString(job.negative_prompt, `jobs[${index}].negative_prompt`);
+    const prompt = requiredString(job.prompt, `jobs[${index}].prompt`);
+    const negativePrompt = requiredString(job.negative_prompt, `jobs[${index}].negative_prompt`);
     const imageSize = requiredString(job.image_size, `jobs[${index}].image_size`);
-    if (!TEST_GENERATION_POLICY.allowedImageSizes.includes(imageSize)) {
+    if (!ALLOWED_IMAGE_SIZE_SET.has(imageSize)) {
       throw new Error(`jobs[${index}].image_size is not supported`);
     }
+    return {
+      ...job,
+      id,
+      scene_id: sceneId,
+      source,
+      prompt,
+      negative_prompt: negativePrompt,
+      image_size: imageSize,
+    };
   }
 
   return {...job, id, scene_id: sceneId, source};
@@ -76,7 +98,8 @@ export const validateAssetJobsDocument = (document) => {
     throw new Error("jobs must be a non-empty array");
   }
 
-  const policy = normalizePolicy(document.policy ?? {});
+  const suppliedPolicy = document?.policy === undefined ? {} : document.policy;
+  const policy = normalizePolicy(suppliedPolicy);
   const jobIds = new Set();
   const jobs = document.jobs.map((job, index) => validateJob(job, index, jobIds));
   const aiGenerationJobs = jobs.filter(({source}) => source === "ai_generate");
