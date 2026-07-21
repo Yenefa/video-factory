@@ -97,7 +97,8 @@ research package（及任何层产出）**不独立版本号**，标注"按 Spec
 | ③ Script | v3.0-20260722 | 当前编剧与叙事导演规范（Director，7 步）；Role Strategist->Director，Workflow 11步->7步，Script 输出 Narration Timeline（estimated_duration 粗估），新增 Voice Direction / Visual Seed；TTS/Timing 实测仍覆盖最终时长 |
 | ③ Script sample（RAG topic） | 按 Spec v2.0-20260721 实测样例 | 13 段 TTS 已生成；采用本地 1.2× 版本，口播时间线锁定为 65.866 秒（原速 78.178 秒） |
 | TTS/Timing（横切服务） | v1.0-20260722 | 首版声音制作 Agent spec；MiniMax speech-2.6-turbo + Podcast_girl 实测 timeline；Word Timestamp / Subtitle / Quality Eval 待实现 |
-| ④ Visual Language | v0.1-20260721 | 首版可复用视觉导演契约；明确视觉策略、运动概念、跨场视觉语法以及与 Asset Planning / Storyboard 的边界 |
+| ④ Visual Language | v0.1-20260721 | 首版视觉导演契约（含 Motion concept + Visual grammar），由 v1.0 取代 |
+| ④ Visual Language | v1.0-20260722 | 当前视觉语义与风格系统规范；Motion concept 下沉到 ⑥ Storyboard，加 Voice Package 输入（对接 TTS v1.0），Workflow 5步->4步，Strategy 换 Code Viz->Comparison，加 Example |
 | ④ Visual Language sample（RAG topic） | 按 Spec v0.1-20260721 | Claude × Google 混合方向；5 个场景覆盖全部 13 段锁定旁白 |
 | ⑤ Asset Planning | v0.3-20260721 | 首版资产生成契约；受限 SiliconFlow Kolors 文生图（≤3 张/次、单图单请求、不重试、不 fallback、即时下载），DPAPI 凭证启动器，本地原子 manifest |
 | ⑤ Asset Planning sample（RAG topic） | 按 Spec v0.3-20260721 | 4 job（3 ai_generate 背景 + 1 code 图表）；smoke test 已验证 Kolors 生图 |
