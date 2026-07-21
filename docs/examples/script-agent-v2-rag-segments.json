@@ -1,0 +1,125 @@
+{
+  "timing_status": "draft",
+  "estimated_duration_range_ms": [75000, 90000],
+  "model": "speech-2.6-turbo",
+  "voice_id": "Podcast_girl",
+  "segments": [
+    {
+      "segment_id": "scene-01-beat-01",
+      "scene_id": "scene-01",
+      "beat_type": "hook",
+      "narration": "每次模型的上下文变长，都有人宣布：RAG 死了。",
+      "source_refs": ["insights.md Top 10 #1", "report.md §7.2"],
+      "estimated_duration_range_ms": [3000, 4500],
+      "pause_after_ms": 250
+    },
+    {
+      "segment_id": "scene-01-beat-02",
+      "scene_id": "scene-01",
+      "beat_type": "contrast",
+      "narration": "但能塞进一百万 Token，和能找到正确答案，是两回事。",
+      "source_refs": ["insights.md Top 10 #1", "report.md §7.2"],
+      "estimated_duration_range_ms": [3500, 5000],
+      "pause_after_ms": 450
+    },
+    {
+      "segment_id": "scene-02-beat-01",
+      "scene_id": "scene-02",
+      "beat_type": "problem",
+      "narration": "想象把整个公司的资料库，一次性倒在模型桌上。",
+      "source_refs": ["insights.md Top 10 #1"],
+      "estimated_duration_range_ms": [3500, 5000],
+      "pause_after_ms": 250
+    },
+    {
+      "segment_id": "scene-02-beat-02",
+      "scene_id": "scene-02",
+      "beat_type": "problem",
+      "narration": "桌子确实变大了，但成本、私有数据边界，还有到底该看哪一页，一个都没有自动消失。",
+      "source_refs": ["insights.md Top 10 #1", "insights.md Most Misunderstood #5", "report.md §7.2"],
+      "estimated_duration_range_ms": [7000, 9500],
+      "pause_after_ms": 500
+    },
+    {
+      "segment_id": "scene-03-beat-01",
+      "scene_id": "scene-03",
+      "beat_type": "discovery",
+      "narration": "真正可能过时的，不是 RAG，而是把它理解成切块、向量搜索、取前几条的固定流水线。",
+      "source_refs": ["insights.md Top 10 #1", "report.md §7.2"],
+      "estimated_duration_range_ms": [7000, 9500],
+      "pause_after_ms": 300
+    },
+    {
+      "segment_id": "scene-03-beat-02",
+      "scene_id": "scene-03",
+      "beat_type": "discovery",
+      "narration": "RAG 真正要做的，是在回答之前，先把外部信息选对。",
+      "source_refs": ["insights.md Top 10 #1", "report.md §7.2"],
+      "estimated_duration_range_ms": [4000, 5500],
+      "pause_after_ms": 250
+    },
+    {
+      "segment_id": "scene-03-beat-03",
+      "scene_id": "scene-03",
+      "beat_type": "transition",
+      "narration": "长上下文，只是让切块没那么痛苦。",
+      "source_refs": ["report.md §7.2"],
+      "estimated_duration_range_ms": [2500, 4000],
+      "pause_after_ms": 500
+    },
+    {
+      "segment_id": "scene-04-beat-01",
+      "scene_id": "scene-04",
+      "beat_type": "evidence",
+      "narration": "Anthropic 做过一个很简单的改动：给每个碎片补上五十到一百个 Token 的背景，再去建立索引。",
+      "source_refs": ["report.md §4.5", "anthropic-contextual-retrieval.md"],
+      "estimated_duration_range_ms": [8000, 10500],
+      "pause_after_ms": 350
+    },
+    {
+      "segment_id": "scene-04-beat-02",
+      "scene_id": "scene-04",
+      "beat_type": "evidence",
+      "narration": "实验中，检索失败率下降了百分之四十九；加上重排序，下降到百分之六十七。",
+      "source_refs": ["report.md §4.5", "anthropic-contextual-retrieval.md"],
+      "estimated_duration_range_ms": [6500, 8500],
+      "pause_after_ms": 500
+    },
+    {
+      "segment_id": "scene-04-beat-03",
+      "scene_id": "scene-04",
+      "beat_type": "qualification",
+      "narration": "当然，这个收益会随数据和系统变化，但方向很清楚：重点不是塞得更多，而是取得更准。",
+      "source_refs": ["report.md §4.5", "report.md §7.1"],
+      "estimated_duration_range_ms": [7000, 9500],
+      "pause_after_ms": 550
+    },
+    {
+      "segment_id": "scene-05-beat-01",
+      "scene_id": "scene-05",
+      "beat_type": "insight",
+      "narration": "所以未来真正的问题，不是长上下文还是 RAG。",
+      "source_refs": ["report.md §7.2"],
+      "estimated_duration_range_ms": [3500, 5000],
+      "pause_after_ms": 250
+    },
+    {
+      "segment_id": "scene-05-beat-02",
+      "scene_id": "scene-05",
+      "beat_type": "insight",
+      "narration": "而是：哪些信息，应该在什么时候进入上下文。",
+      "source_refs": ["report.md §7.2", "inference: capacity vs retrieval synthesis"],
+      "estimated_duration_range_ms": [3500, 5000],
+      "pause_after_ms": 300
+    },
+    {
+      "segment_id": "scene-05-beat-03",
+      "scene_id": "scene-05",
+      "beat_type": "close",
+      "narration": "模型的桌子越来越大，但你仍然需要一个人，决定桌上该放什么。",
+      "source_refs": ["inference: capacity vs retrieval synthesis"],
+      "estimated_duration_range_ms": [5000, 7000],
+      "pause_after_ms": 0
+    }
+  ]
+}
