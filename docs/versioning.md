@@ -92,10 +92,25 @@ research package（及任何层产出）**不独立版本号**，标注"按 Spec
 | ① Collect | v1.0-20260720 | 首版（raw app） |
 | ② Research | v1.0-20260720 | 首版（`docs/research-agent-spec-v1.0.md`） |
 | ② Research package（RAG topic） | 按 Spec v1.0-20260720 跑 | 含同 snapshot 勘误：CRAG 修正 + 7 帖补读 + conversational-rag 标注（local，gitignored） |
+| ③ Script | v1.0-20260720 | 历史长视频规范（5–10 分钟），由 v2.0 取代 |
+| ③ Script | v2.0-20260721 | 当前短视频策略规范；加入 angle-first、semantic segments、TTS 实测锁时和 Storyboard 最终锁时；TTS/Timing 单元测试已通过 |
+| ③ Script sample（RAG topic） | 按 Spec v2.0-20260721 实测样例 | 13 段 TTS 已生成；采用本地 1.2× 版本，口播时间线锁定为 65.866 秒（原速 78.178 秒） |
+| ④ Visual Language | v0.1-20260721 | 首版可复用视觉导演契约；明确视觉策略、运动概念、跨场视觉语法以及与 Asset Planning / Storyboard 的边界 |
+| ④ Visual Language sample（RAG topic） | 按 Spec v0.1-20260721 | Claude × Google 混合方向；5 个场景覆盖全部 13 段锁定旁白 |
 
 ---
 
 ## 下一版本计划
+
+### Script v2.0 TTS/Timing 实现状态
+
+- ✅ semantic segment 到 MiniMax TTS 音频的生成流程（`tts-timing/`）。
+- ✅ 使用 API 返回的实际 `audio_length` 生成 `timeline.json`，不接受 Script Agent 手写精确毫秒值。
+- ✅ 缺少 `MINIMAX_API_KEY` 时在发起 API 请求前安全停止。
+- ✅ Live API 与 `Podcast_girl` 音色已于 2026-07-21 验证；生成 13 段 MP3，原速 78.178 秒；本地 `atempo=1.2` 后实测 65.866 秒，无额外 API 请求。
+- ⏳ narration timeline 到 ⑥ Storyboard 的视觉停留、转场和静默尚未实现。
+
+> **版本决策：** v1.0 的长视频编剧改为 v2.0 的短视频策略师，并重构时间权责，属于“角色 + 方法论 + 输出契约”的根本变化，符合家族代数升级条件。
 
 ### Research Spec v1.5（下一小版本）- 加新能力
 - 扫描版 PDF **OCR fallback**（pypdf 优先 -> 失败 OCR -> 缓存 `.extracted/`）
